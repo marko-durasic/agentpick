@@ -1,0 +1,11 @@
+# Binaries
+/agentpick
+/*.exe
+/*.test
+/dist/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

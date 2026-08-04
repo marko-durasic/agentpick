@@ -1,0 +1,44 @@
+# Bang-for-buck defaults for coding-agent CLIs.
+# Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
+version: 1
+updated: "2026-08-04"
+providers:
+  claude:
+    binary: claude
+    display: Claude Code
+    headroom_wrap: claude
+    headroom_flags: ["--1m"]
+    env:
+      ANTHROPIC_MODEL: claude-opus-5
+    passthrough: ["--effort", "high"]
+    summary: "Opus 5 · 1M · effort high"
+    why: "Near-frontier agentic coding at half of Fable; high effort is the cost/quality sweet spot"
+  codex:
+    binary: codex
+    display: Codex CLI
+    headroom_wrap: codex
+    passthrough: ["-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=\"high\""]
+    summary: "GPT-5.6 Sol · reasoning high"
+    why: "Sol is the Codex value frontier for long agentic runs"
+  grok:
+    binary: grok
+    display: Grok CLI
+    headroom_wrap: grok
+    passthrough: ["-m", "grok-4.5", "--effort", "high"]
+    summary: "grok-4.5 · effort high"
+    why: "Current best coding default on Grok; high effort without max burn"
+  copilot:
+    binary: copilot
+    display: GitHub Copilot CLI
+    headroom_wrap: copilot
+    headroom_flags: ["--subscription"]
+    passthrough: ["--model", "gpt-5.6-terra"]
+    summary: "gpt-5.6-terra · subscription"
+    why: "Terra is the Copilot credit-efficient coding lane (stronger than Luna, cheaper than Sol)"
+  agy:
+    binary: agy
+    display: Antigravity (agy)
+    # No Headroom wrap — Google harness does not use Anthropic/OpenAI base URLs.
+    passthrough: ["--model", "gemini-3.6-flash-high", "--effort", "high"]
+    summary: "gemini-3.6-flash-high · effort high"
+    why: "Best Gemini value tier on Antigravity; use gemini-3.1-pro-high for heavier reasoning"
