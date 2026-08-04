@@ -32,13 +32,15 @@ providers:
     display: GitHub Copilot CLI
     headroom_wrap: copilot
     headroom_flags: ["--subscription"]
-    # luna is in Copilot's catalog (terra triggers BYOK "not in catalog" token-limit warning
-    # when Headroom sets a custom base URL). Cheapest coding lane that still works well.
+    # Headroom sets a custom base URL → Copilot BYOK mode. GPT-5.6-* IDs are not in
+    # that built-in catalog; setting max token env vars silences the startup warning.
     env:
       COPILOT_PROVIDER_MODEL_ID: gpt-5.6-luna
+      COPILOT_PROVIDER_MAX_PROMPT_TOKENS: "128000"
+      COPILOT_PROVIDER_MAX_OUTPUT_TOKENS: "16384"
     passthrough: ["--model", "gpt-5.6-luna"]
     summary: "gpt-5.6-luna · subscription"
-    why: "Luna is the Copilot credit-efficient catalog model; avoids Headroom BYOK catalog warnings that Terra hits"
+    why: "Luna is the Copilot credit-efficient coding lane; explicit token limits avoid Headroom BYOK catalog warnings"
   agy:
     binary: agy
     display: Antigravity (agy)

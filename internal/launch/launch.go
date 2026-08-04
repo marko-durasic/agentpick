@@ -128,9 +128,12 @@ func setEnv(env []string, key, value string) []string {
 }
 
 func envDiff(env []string) map[string]string {
-	// Only surface vars that look like provider overrides (not full environ dump).
+	// Surface provider overrides (not the full environ dump).
 	interesting := map[string]struct{}{
-		"ANTHROPIC_MODEL": {},
+		"ANTHROPIC_MODEL":                    {},
+		"COPILOT_PROVIDER_MODEL_ID":          {},
+		"COPILOT_PROVIDER_MAX_PROMPT_TOKENS": {},
+		"COPILOT_PROVIDER_MAX_OUTPUT_TOKENS": {},
 	}
 	out := map[string]string{}
 	for _, e := range env {
