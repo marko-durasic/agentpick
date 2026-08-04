@@ -1,6 +1,6 @@
 # Bang-for-buck defaults for coding-agent CLIs.
 # Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
-version: 1
+version: 2
 updated: "2026-08-04"
 providers:
   claude:
@@ -32,9 +32,13 @@ providers:
     display: GitHub Copilot CLI
     headroom_wrap: copilot
     headroom_flags: ["--subscription"]
-    passthrough: ["--model", "gpt-5.6-terra"]
-    summary: "gpt-5.6-terra · subscription"
-    why: "Terra is the Copilot credit-efficient coding lane (stronger than Luna, cheaper than Sol)"
+    # luna is in Copilot's catalog (terra triggers BYOK "not in catalog" token-limit warning
+    # when Headroom sets a custom base URL). Cheapest coding lane that still works well.
+    env:
+      COPILOT_PROVIDER_MODEL_ID: gpt-5.6-luna
+    passthrough: ["--model", "gpt-5.6-luna"]
+    summary: "gpt-5.6-luna · subscription"
+    why: "Luna is the Copilot credit-efficient catalog model; avoids Headroom BYOK catalog warnings that Terra hits"
   agy:
     binary: agy
     display: Antigravity (agy)

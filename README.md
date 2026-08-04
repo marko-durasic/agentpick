@@ -61,7 +61,7 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 | `claude` | Opus 5 · `--1m` · effort high | `wrap claude` |
 | `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` |
 | `grok` | grok-4.5 · effort high | `wrap grok` |
-| `copilot` | gpt-5.6-terra · `--subscription` | `wrap copilot` |
+| `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` |
 | `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) |
 
 ## License
