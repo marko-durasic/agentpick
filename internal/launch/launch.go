@@ -11,9 +11,10 @@ import (
 
 // Options controls how a provider is launched.
 type Options struct {
-	NoHeadroom bool
-	DryRun     bool
-	ExtraArgs  []string
+	NoHeadroom  bool
+	NoTokensave bool
+	DryRun      bool
+	ExtraArgs   []string
 }
 
 // Plan is the resolved argv + env for a launch.
