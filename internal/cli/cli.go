@@ -10,12 +10,14 @@ import (
 
 	"github.com/marko-durasic/agentpick/internal/defaults"
 	"github.com/marko-durasic/agentpick/internal/launch"
+	"github.com/marko-durasic/agentpick/internal/tokensync"
 	"github.com/spf13/cobra"
 )
 
 // NewRoot builds the agentpick command tree.
 func NewRoot() *cobra.Command {
 	var noHeadroom bool
+	var noTokensave bool
 	var dryRun bool
 
 	root := &cobra.Command{
@@ -28,11 +30,17 @@ When Headroom is installed, eligible providers run through
   headroom wrap <tool> …
 so context stays compressed. Use --no-headroom to force the native CLI.
 
+When tokensave is installed, agentpick runs
+  tokensave sync
+on every indexed project before launch so the code graph stays ready.
+Use --no-tokensave to skip.
+
 Run with no arguments for an interactive provider picker.
 
 Global flags may appear before the provider name:
   agentpick --dry-run claude
-  agentpick --no-headroom codex "fix tests"`,
+  agentpick --no-headroom codex "fix tests"
+  agentpick --no-tokensave grok`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reg, err := defaults.Load()
@@ -43,16 +51,17 @@ Global flags may appear before the provider name:
 			if err != nil {
 				return err
 			}
-			opt := mergeOpts(noHeadroom, dryRun, nil)
+			opt := mergeOpts(noHeadroom, noTokensave, dryRun, nil)
 			return runProvider(reg, name, opt)
 		},
 	}
 
 	root.PersistentFlags().BoolVar(&noHeadroom, "no-headroom", false, "skip Headroom wrap; launch the native CLI")
+	root.PersistentFlags().BoolVar(&noTokensave, "no-tokensave", false, "skip tokensave sync of indexed projects before launch")
 	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "print the resolved command without executing")
 
 	root.AddCommand(newListCmd())
-	root.AddCommand(newProvidersCmd(&noHeadroom, &dryRun)...)
+	root.AddCommand(newProvidersCmd(&noHeadroom, &noTokensave, &dryRun)...)
 
 	return root
 }
@@ -67,8 +76,10 @@ func newListCmd() *cobra.Command {
 				return err
 			}
 			hr := launch.HeadroomAvailable()
+			ts := tokensync.Available()
 			fmt.Fprintf(cmd.OutOrStdout(), "agentpick defaults (v%d, updated %s)\n", reg.Version, reg.Updated)
-			fmt.Fprintf(cmd.OutOrStdout(), "headroom on PATH: %v\n\n", hr)
+			fmt.Fprintf(cmd.OutOrStdout(), "headroom on PATH: %v\n", hr)
+			fmt.Fprintf(cmd.OutOrStdout(), "tokensave on PATH: %v (preflight sync all projects)\n\n", ts)
 			for _, name := range reg.Names() {
 				p := reg.Providers[name]
 				avail := "missing"
@@ -95,7 +106,7 @@ func newListCmd() *cobra.Command {
 	}
 }
 
-func newProvidersCmd(noHeadroom, dryRun *bool) []*cobra.Command {
+func newProvidersCmd(noHeadroom, noTokensave, dryRun *bool) []*cobra.Command {
 	reg, err := defaults.Load()
 	if err != nil {
 		return []*cobra.Command{{
@@ -134,10 +145,11 @@ func newProvidersCmd(noHeadroom, dryRun *bool) []*cobra.Command {
 				}
 				// DisableFlagParsing prevents Cobra from applying root persistent
 				// flags that appear before the provider name; re-read from os.Args.
-				fromArgsNoHR, fromArgsDry := globalsFromOSArgs(providerSet)
-				extraNoHR, extraDry, extra := stripGlobalFlags(args)
+				fromArgsNoHR, fromArgsNoTS, fromArgsDry := globalsFromOSArgs(providerSet)
+				extraNoHR, extraNoTS, extraDry, extra := stripGlobalFlags(args)
 				opt := mergeOpts(
 					*noHeadroom || fromArgsNoHR || extraNoHR,
+					*noTokensave || fromArgsNoTS || extraNoTS,
 					*dryRun || fromArgsDry || extraDry,
 					extra,
 				)
@@ -149,56 +161,69 @@ func newProvidersCmd(noHeadroom, dryRun *bool) []*cobra.Command {
 	return cmds
 }
 
-func mergeOpts(noHeadroom, dryRun bool, extra []string) launch.Options {
+func mergeOpts(noHeadroom, noTokensave, dryRun bool, extra []string) launch.Options {
 	return launch.Options{
-		NoHeadroom: noHeadroom,
-		DryRun:     dryRun,
-		ExtraArgs:  extra,
+		NoHeadroom:  noHeadroom,
+		NoTokensave: noTokensave,
+		DryRun:      dryRun,
+		ExtraArgs:   extra,
 	}
 }
 
-// globalsFromOSArgs reads --dry-run / --no-headroom that appear before the
-// provider subcommand. Needed because DisableFlagParsing skips normal parsing.
-func globalsFromOSArgs(providers map[string]struct{}) (noHeadroom, dryRun bool) {
+// globalsFromOSArgs reads agentpick globals that appear before the provider
+// subcommand. Needed because DisableFlagParsing skips normal parsing.
+func globalsFromOSArgs(providers map[string]struct{}) (noHeadroom, noTokensave, dryRun bool) {
 	args := os.Args[1:]
 	for _, a := range args {
 		if _, ok := providers[a]; ok {
-			return noHeadroom, dryRun
+			return noHeadroom, noTokensave, dryRun
 		}
 		if a == "--" {
-			return noHeadroom, dryRun
+			return noHeadroom, noTokensave, dryRun
 		}
 		switch a {
 		case "--no-headroom":
 			noHeadroom = true
+		case "--no-tokensave":
+			noTokensave = true
 		case "--dry-run":
 			dryRun = true
 		}
 	}
-	return noHeadroom, dryRun
+	return noHeadroom, noTokensave, dryRun
 }
 
 // stripGlobalFlags removes agentpick-owned flags that Cobra may forward into
 // provider argv when DisableFlagParsing is set.
-func stripGlobalFlags(args []string) (noHeadroom, dryRun bool, rest []string) {
+func stripGlobalFlags(args []string) (noHeadroom, noTokensave, dryRun bool, rest []string) {
 	rest = make([]string, 0, len(args))
 	for _, a := range args {
 		switch a {
 		case "--no-headroom":
 			noHeadroom = true
+		case "--no-tokensave":
+			noTokensave = true
 		case "--dry-run":
 			dryRun = true
 		default:
 			rest = append(rest, a)
 		}
 	}
-	return noHeadroom, dryRun, rest
+	return noHeadroom, noTokensave, dryRun, rest
 }
 
 func runProvider(reg *defaults.Registry, name string, opt launch.Options) error {
 	p, ok := reg.Get(name)
 	if !ok {
 		return fmt.Errorf("unknown provider %q (try: agentpick list)", name)
+	}
+	syncRes := tokensync.SyncAll(tokensync.Options{
+		NoTokensave: opt.NoTokensave,
+		DryRun:      opt.DryRun,
+		Out:         os.Stderr,
+	})
+	if syncRes.Skipped != "" {
+		fmt.Fprintf(os.Stderr, "agentpick: %s\n", syncRes.Skipped)
 	}
 	plan, err := launch.Resolve(p, opt)
 	if err != nil {

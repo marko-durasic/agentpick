@@ -13,16 +13,16 @@ func TestGlobalsFromOSArgs(t *testing.T) {
 	old := os.Args
 	defer func() { os.Args = old }()
 
-	os.Args = []string{"agentpick", "--dry-run", "--no-headroom", "claude", "hi"}
-	noHR, dry := globalsFromOSArgs(providers)
-	if !noHR || !dry {
-		t.Fatalf("got noHR=%v dry=%v", noHR, dry)
+	os.Args = []string{"agentpick", "--dry-run", "--no-headroom", "--no-tokensave", "claude", "hi"}
+	noHR, noTS, dry := globalsFromOSArgs(providers)
+	if !noHR || !noTS || !dry {
+		t.Fatalf("got noHR=%v noTS=%v dry=%v", noHR, noTS, dry)
 	}
 
 	os.Args = []string{"agentpick", "claude", "--dry-run"}
-	noHR, dry = globalsFromOSArgs(providers)
-	if noHR || dry {
-		t.Fatalf("flags after provider must be ignored, got noHR=%v dry=%v", noHR, dry)
+	noHR, noTS, dry = globalsFromOSArgs(providers)
+	if noHR || noTS || dry {
+		t.Fatalf("flags after provider must be ignored, got noHR=%v noTS=%v dry=%v", noHR, noTS, dry)
 	}
 }
 
@@ -44,9 +44,9 @@ func TestListSmoke(t *testing.T) {
 }
 
 func TestStripGlobalFlags(t *testing.T) {
-	noHR, dry, rest := stripGlobalFlags([]string{"--dry-run", "--no-headroom", "hi", "--effort", "max"})
-	if !noHR || !dry {
-		t.Fatalf("flags: noHR=%v dry=%v", noHR, dry)
+	noHR, noTS, dry, rest := stripGlobalFlags([]string{"--dry-run", "--no-headroom", "--no-tokensave", "hi", "--effort", "max"})
+	if !noHR || !noTS || !dry {
+		t.Fatalf("flags: noHR=%v noTS=%v dry=%v", noHR, noTS, dry)
 	}
 	if strings.Join(rest, " ") != "hi --effort max" {
 		t.Fatalf("rest: %v", rest)

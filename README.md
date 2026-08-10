@@ -18,6 +18,8 @@ Each agent CLI has different model flags and effort knobs. The “good” defaul
 
 When [Headroom](https://github.com/headroomlabs-ai/headroom) is on your `PATH`, eligible providers run through `headroom wrap …` (context compression). If Headroom is missing, `agentpick` falls back to the native CLI with the same model/effort flags.
 
+When [tokensave](https://github.com/aovestdipaperino/tokensave) is on your `PATH`, `agentpick` runs `tokensave sync` on **every** indexed project (`tokensave list -a`) before launch so the code graph is ready. Missing tokensave or a sync failure is non-fatal — the agent still starts. Use `--no-tokensave` to skip.
+
 ## Install
 
 Requires Go 1.22+.
@@ -35,13 +37,14 @@ Installs `~/.local/bin/agentpick` plus short aliases: `hclaude`, `hopus`, `hcode
 ```bash
 agentpick --help
 agentpick list
-agentpick --dry-run claude          # print resolved argv
+agentpick --dry-run claude          # print resolved argv (+ planned tokensave syncs)
 agentpick --no-headroom codex       # force native CLI
+agentpick --no-tokensave grok       # skip graph sync preflight
 agentpick claude --resume <id>      # passthrough args
 hclaude                             # same as agentpick claude
 ```
 
-Global flags go **before** the provider name: `--dry-run`, `--no-headroom`.
+Global flags go **before** the provider name: `--dry-run`, `--no-headroom`, `--no-tokensave`.
 
 ## Bumping defaults
 
