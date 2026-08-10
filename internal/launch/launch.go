@@ -4,24 +4,34 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/marko-durasic/agentpick/internal/defaults"
 )
 
+// DefaultHeadroomPort is the DuReef shared Headroom proxy port.
+// Cursor mcp login OAuth owns :8787 — Headroom must never latch there.
+const DefaultHeadroomPort = 8788
+
+// OAuthCallbackPort is Cursor's hardcoded mcp login callback (do not use for Headroom).
+const OAuthCallbackPort = 8787
+
 // Options controls how a provider is launched.
 type Options struct {
-	NoHeadroom  bool
-	NoTokensave bool
-	DryRun      bool
-	ExtraArgs   []string
+	NoHeadroom    bool
+	NoTokensave   bool
+	DryRun        bool
+	ExtraArgs     []string
+	HeadroomPort  int // 0 = resolve from env / default
 }
 
 // Plan is the resolved argv + env for a launch.
 type Plan struct {
-	Argv          []string
-	Env           []string
-	UsedHeadroom  bool
+	Argv            []string
+	Env             []string
+	UsedHeadroom    bool
+	HeadroomPort    int
 	HeadroomSkipped string // reason when wrap was possible but skipped / unavailable
 }
 
@@ -40,14 +50,11 @@ func Resolve(p defaults.Provider, opt Options) (Plan, error) {
 	headroomPath, err := lookPath("headroom")
 	headroomOK := err == nil
 	wantWrap := p.HeadroomWrap != "" && !opt.NoHeadroom
+	port := ResolveHeadroomPort(opt.HeadroomPort)
 
 	if wantWrap && headroomOK {
-		argv := []string{headroomPath, "wrap", p.HeadroomWrap}
-		argv = append(argv, p.HeadroomFlags...)
-		argv = append(argv, "--")
-		argv = append(argv, p.Passthrough...)
-		argv = append(argv, extra...)
-		return Plan{Argv: argv, Env: env, UsedHeadroom: true}, nil
+		argv := BuildHeadroomArgv(headroomPath, p.HeadroomWrap, port, p.HeadroomFlags, p.Passthrough, extra)
+		return Plan{Argv: argv, Env: env, UsedHeadroom: true, HeadroomPort: port}, nil
 	}
 
 	binPath, err := lookPath(p.Binary)
@@ -59,16 +66,95 @@ func Resolve(p defaults.Provider, opt Options) (Plan, error) {
 	argv = append(argv, p.Passthrough...)
 	argv = append(argv, extra...)
 
-	plan := Plan{Argv: argv, Env: env, UsedHeadroom: false}
+	plan := Plan{Argv: argv, Env: env, UsedHeadroom: false, HeadroomPort: port}
 	switch {
 	case p.HeadroomWrap == "":
-		// Provider has no Headroom integration (e.g. agy).
+		// Provider has no Headroom integration (e.g. agy, grok native).
 	case opt.NoHeadroom:
 		plan.HeadroomSkipped = "forced by --no-headroom"
 	case !headroomOK:
 		plan.HeadroomSkipped = "headroom not on PATH; launching native CLI"
 	}
 	return plan, nil
+}
+
+// ResolveHeadroomPort picks the shared Headroom proxy port.
+// Order: explicit > DUREEF_HEADROOM_PORT > HEADROOM_PORT > DefaultHeadroomPort (8788).
+// A resolved :8787 is remapped to :8788 so Cursor OAuth callback is never stolen.
+func ResolveHeadroomPort(explicit int) int {
+	port := explicit
+	if port <= 0 {
+		port = envPort("DUREEF_HEADROOM_PORT")
+	}
+	if port <= 0 {
+		port = envPort("HEADROOM_PORT")
+	}
+	if port <= 0 {
+		port = DefaultHeadroomPort
+	}
+	if port == OAuthCallbackPort {
+		// Never latch Headroom onto Cursor mcp login OAuth callback.
+		return DefaultHeadroomPort
+	}
+	return port
+}
+
+// BuildHeadroomArgv builds:
+//
+//	headroom wrap <tool> --port <N> [headroom_flags…] -- [passthrough…] [extra…]
+//
+// Always uses long-form --port (never bare -p) so wrap tools whose short -p
+// means something else (or that pass -p through) cannot mis-route the proxy.
+func BuildHeadroomArgv(headroomPath, tool string, port int, headroomFlags, passthrough, extra []string) []string {
+	if port <= 0 {
+		port = DefaultHeadroomPort
+	}
+	if port == OAuthCallbackPort {
+		port = DefaultHeadroomPort
+	}
+	argv := []string{headroomPath, "wrap", tool, "--port", strconv.Itoa(port)}
+	argv = append(argv, sanitizeHeadroomFlags(headroomFlags)...)
+	argv = append(argv, "--")
+	argv = append(argv, passthrough...)
+	argv = append(argv, extra...)
+	return argv
+}
+
+// sanitizeHeadroomFlags drops bare -p / --port pairs from YAML flags so the
+// programmatically injected --port is the single source of truth.
+func sanitizeHeadroomFlags(flags []string) []string {
+	if len(flags) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(flags))
+	for i := 0; i < len(flags); i++ {
+		f := flags[i]
+		switch {
+		case f == "-p" || f == "--port":
+			// Skip flag and its value if present as a separate arg.
+			if i+1 < len(flags) && !strings.HasPrefix(flags[i+1], "-") {
+				i++
+			}
+			continue
+		case strings.HasPrefix(f, "-p=") || strings.HasPrefix(f, "--port="):
+			continue
+		default:
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func envPort(key string) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > 65535 {
+		return 0
+	}
+	return n
 }
 
 // Exec runs the plan (replaces the current process when not DryRun).

@@ -1,7 +1,7 @@
 # Bang-for-buck defaults for coding-agent CLIs.
 # Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
 version: 2
-updated: "2026-08-04"
+updated: "2026-08-10"
 providers:
   claude:
     binary: claude
@@ -23,14 +23,17 @@ providers:
   grok:
     binary: grok
     display: Grok CLI
-    headroom_wrap: grok
+    # Native only — Headroom Anthropic-style proxy empties Grok's model catalog
+    # ("unknown model id"). Do not set headroom_wrap for grok.
     passthrough: ["-m", "grok-4.5", "--effort", "high"]
-    summary: "grok-4.5 · effort high"
-    why: "Current best coding default on Grok; high effort without max burn"
+    summary: "grok-4.5 · effort high · native"
+    why: "Current best coding default on Grok; native launch avoids Headroom catalog wipe"
   copilot:
     binary: copilot
     display: GitHub Copilot CLI
     headroom_wrap: copilot
+    # Keep --subscription on the wrap side (before --). Never pass bare -p for port —
+    # launch injects long-form --port 8788 (shared DuReef proxy; Cursor OAuth keeps :8787).
     headroom_flags: ["--subscription"]
     # Headroom sets a custom base URL → Copilot BYOK mode. GPT-5.6-* IDs are not in
     # that built-in catalog; setting max token env vars silences the startup warning.

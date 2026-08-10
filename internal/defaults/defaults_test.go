@@ -39,4 +39,11 @@ func TestLoad(t *testing.T) {
 	if agy.HeadroomWrap != "" {
 		t.Fatalf("agy should not headroom-wrap, got %q", agy.HeadroomWrap)
 	}
+	grok, ok := reg.Get("grok")
+	if !ok {
+		t.Fatal("missing grok")
+	}
+	if grok.HeadroomWrap != "" {
+		t.Fatalf("grok must launch native (empty headroom_wrap), got %q", grok.HeadroomWrap)
+	}
 }
