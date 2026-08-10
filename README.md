@@ -7,8 +7,8 @@ agentpick              # interactive picker
 agentpick list         # show optimal defaults
 agentpick claude       # Opus 5 · 1M · effort high
 agentpick codex        # GPT-5.6 Sol · reasoning high
-agentpick grok         # grok-4.5 · effort high
-agentpick copilot      # gpt-5.6-terra · subscription
+agentpick grok         # grok-4.5 · effort high · native
+agentpick copilot      # gpt-5.6-luna · subscription
 agentpick agy          # gemini-3.6-flash-high · effort high
 ```
 
@@ -16,7 +16,7 @@ agentpick agy          # gemini-3.6-flash-high · effort high
 
 Each agent CLI has different model flags and effort knobs. The “good” default changes as labs ship new models. `agentpick` keeps those choices in one YAML file so you can bump a model in a PR instead of rewriting shell aliases.
 
-When [Headroom](https://github.com/headroomlabs-ai/headroom) is on your `PATH`, eligible providers run through `headroom wrap …` (context compression). If Headroom is missing, `agentpick` falls back to the native CLI with the same model/effort flags.
+When [Headroom](https://github.com/headroomlabs-ai/headroom) is on your `PATH`, eligible providers run through `headroom wrap <tool> --port 8788 …` (shared DuReef proxy; never bare `-p`, never `:8787` — that port is Cursor `mcp login` OAuth). Override with `DUREEF_HEADROOM_PORT` / `HEADROOM_PORT`. If Headroom is missing, `agentpick` falls back to the native CLI with the same model/effort flags. **Grok always launches native** (Headroom wrap empties the Grok model catalog).
 
 When [tokensave](https://github.com/aovestdipaperino/tokensave) is on your `PATH`, `agentpick` runs `tokensave sync` on **every** indexed project (`tokensave list -a`) before launch so the code graph is ready. Missing tokensave or a sync failure is non-fatal — the agent still starts. Use `--no-tokensave` to skip.
 
@@ -61,10 +61,10 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 
 | Provider | Default | Headroom |
 |----------|---------|----------|
-| `claude` | Opus 5 · `--1m` · effort high | `wrap claude` |
-| `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` |
-| `grok` | grok-4.5 · effort high | `wrap grok` |
-| `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` |
+| `claude` | Opus 5 · `--1m` · effort high | `wrap claude --port 8788` |
+| `codex` | GPT-5.6 Sol · reasoning high | `wrap codex --port 8788` |
+| `grok` | grok-4.5 · effort high | **native only** (catalog safe) |
+| `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot --port 8788` |
 | `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) |
 
 ## License
