@@ -1,7 +1,7 @@
 # Bang-for-buck defaults for coding-agent CLIs.
 # Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
-version: 2
-updated: "2026-08-10"
+version: 3
+updated: "2026-08-13"
 providers:
   claude:
     binary: claude
@@ -25,9 +25,9 @@ providers:
     display: Grok CLI
     # Native only — Headroom Anthropic-style proxy empties Grok's model catalog
     # ("unknown model id"). Do not set headroom_wrap for grok.
-    passthrough: ["-m", "grok-4.5", "--effort", "high"]
-    summary: "grok-4.5 · effort high · native"
-    why: "Current best coding default on Grok; native launch avoids Headroom catalog wipe"
+    passthrough: ["-m", "grok-4.6", "--effort", "high"]
+    summary: "grok-4.6 · effort high · native"
+    why: "Grok CLI default is now 4.6; high effort without max burn; native launch avoids Headroom catalog wipe"
   copilot:
     binary: copilot
     display: GitHub Copilot CLI

@@ -7,7 +7,7 @@ agentpick              # interactive picker
 agentpick list         # show optimal defaults
 agentpick claude       # Opus 5 · 1M · effort high
 agentpick codex        # GPT-5.6 Sol · reasoning high
-agentpick grok         # grok-4.5 · effort high · native
+agentpick grok         # grok-4.6 · effort high · native
 agentpick copilot      # gpt-5.6-luna · subscription
 agentpick agy          # gemini-3.6-flash-high · effort high
 ```
@@ -63,7 +63,7 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 |----------|---------|----------|
 | `claude` | Opus 5 · `--1m` · effort high | `wrap claude --port 8788` |
 | `codex` | GPT-5.6 Sol · reasoning high | `wrap codex --port 8788` |
-| `grok` | grok-4.5 · effort high | **native only** (catalog safe) |
+| `grok` | grok-4.6 · effort high | **native only** (catalog safe) |
 | `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot --port 8788` |
 | `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) |
 
