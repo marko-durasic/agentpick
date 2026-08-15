@@ -12,26 +12,40 @@ import (
 
 func TestFormatLabel(t *testing.T) {
 	pct := 72.4
-	s := Snapshot{Provider: "cursor", RemainingPct: &pct, Source: "cursor-api"}
-	if got := FormatLabel(s); got != "72% left" {
+	s := Snapshot{Provider: "cursor", RemainingPct: &pct, Window: "billing-period", Source: "cursor-api", ResetHint: "resets Sep 1"}
+	if got := FormatLabel(s); got != "billing-period 72% left · resets Sep 1" {
 		t.Fatalf("cursor: got %q", got)
 	}
-	s = Snapshot{Provider: "claude", RemainingPct: &pct, Source: "claude-usage"}
-	if got := FormatLabel(s); got != "week 72% left" {
+	s = Snapshot{Provider: "claude", RemainingPct: &pct, Window: "week", Source: "claude-usage", ResetHint: "resets Tue", Detail: "session 0% left"}
+	if got := FormatLabel(s); !strings.Contains(got, "week 72% left") || !strings.Contains(got, "session 0% left") {
 		t.Fatalf("claude week: got %q", got)
 	}
-	s = Snapshot{Provider: "claude", RemainingPct: &pct, Source: "claude-history"}
+	s = Snapshot{Provider: "claude", RemainingPct: &pct, Window: "session", Source: "claude-history"}
 	if got := FormatLabel(s); got != "session 72% left" {
 		t.Fatalf("claude session: got %q", got)
 	}
-	if got := FormatLabel(Snapshot{Provider: "codex"}); got != "n/a" {
+	s = Snapshot{Provider: "codex", UnavailableReason: "no public quota API (ChatGPT usage blocked)"}
+	if got := FormatLabel(s); !strings.Contains(got, "no public quota API") {
 		t.Fatalf("unknown: got %q", got)
 	}
 }
 
+func TestFormatPickerRow(t *testing.T) {
+	pct := 42.0
+	row := FormatPickerRow(2, "claude", "Opus 5 · 1M · effort high", Snapshot{
+		RemainingPct: &pct,
+		Window:       "week",
+		ResetHint:    "resets Aug 18",
+		Source:       "claude-usage",
+	})
+	if !strings.Contains(row, "2)") || !strings.Contains(row, "claude") || !strings.Contains(row, "week 42% left") {
+		t.Fatalf("row: %q", row)
+	}
+}
+
 func TestParseClaudeWeekUsed(t *testing.T) {
-	out := `Current session: 100% used · resets Aug 15
-Current week (all models): 58% used · resets Aug 18
+	out := `Current session: 100% used · resets Aug 15, 11:20am (Asia/Taipei)
+Current week (all models): 58% used · resets Aug 18, 8am (Asia/Taipei)
 `
 	pct, ok := parseClaudeWeekUsed(out)
 	if !ok || pct != 58 {
@@ -40,6 +54,10 @@ Current week (all models): 58% used · resets Aug 18
 	sess, ok := parseClaudeSessionUsed(out)
 	if !ok || sess != 100 {
 		t.Fatalf("session: got pct=%v ok=%v", sess, ok)
+	}
+	reset := cleanReset(parseReset(weekResetRE, out))
+	if !strings.Contains(reset, "resets") || !strings.Contains(reset, "Aug 18") {
+		t.Fatalf("reset: %q", reset)
 	}
 }
 
@@ -64,7 +82,7 @@ func TestCacheRoundTrip(t *testing.T) {
 	now := time.Date(2026, 8, 15, 2, 0, 0, 0, time.UTC)
 	pct := 80.0
 	saveCache(map[string]Snapshot{
-		"cursor": {Provider: "cursor", RemainingPct: &pct, Label: "80% left", Source: "cursor-api"},
+		"cursor": {Provider: "cursor", RemainingPct: &pct, Label: "billing-period 80% left", Source: "cursor-api", Window: "billing-period"},
 	}, now)
 	got, ok := loadCache(now.Add(30 * time.Second))
 	if !ok {
@@ -87,7 +105,7 @@ func TestSaveCacheKeepsGoodOnFailedProbe(t *testing.T) {
 		"claude": {Provider: "claude", RemainingPct: &pct, Label: "week 42% left", Source: "claude-usage"},
 	}, now)
 	saveCache(map[string]Snapshot{
-		"claude": {Provider: "claude", Label: "n/a", Source: "unknown", Err: "signal: killed"},
+		"claude": {Provider: "claude", Label: FormatLabel(Snapshot{UnavailableReason: "failed"}), Source: "unknown", Err: "signal: killed"},
 	}, now.Add(time.Second))
 	got, ok := loadCache(now.Add(2 * time.Second))
 	if !ok || got["claude"].RemainingPct == nil || *got["claude"].RemainingPct != 42 {
@@ -114,7 +132,7 @@ func TestFetchAllUsesClaudeProbe(t *testing.T) {
 	t.Cleanup(func() { claudeLookPath = oldLook; claudeRun = oldRun })
 	claudeLookPath = func(string) (string, error) { return "/bin/claude", nil }
 	claudeRun = func(ctx context.Context, bin string, args ...string) ([]byte, []byte, error) {
-		return []byte("Current week (all models): 40% used · resets tomorrow\n"), nil, nil
+		return []byte("Current week (all models): 40% used · resets Aug 18, 8am\n"), nil, nil
 	}
 
 	snaps := FetchAll(context.Background(), FetchOptions{
@@ -129,8 +147,8 @@ func TestFetchAllUsesClaudeProbe(t *testing.T) {
 	if !strings.Contains(cl.Label, "week") {
 		t.Fatalf("label: %q", cl.Label)
 	}
-	if snaps["codex"].Label != "n/a" {
-		t.Fatalf("codex should be n/a: %+v", snaps["codex"])
+	if !strings.Contains(snaps["codex"].Label, "no public") {
+		t.Fatalf("codex should explain unavailability: %+v", snaps["codex"])
 	}
 }
 
@@ -149,7 +167,7 @@ func TestClaudeHistoryFallback(t *testing.T) {
 	if s.RemainingPct == nil || *s.RemainingPct != 10 {
 		t.Fatalf("history fallback: %+v", s)
 	}
-	if s.Label != "session 10% left" {
+	if !strings.Contains(s.Label, "session 10% left") {
 		t.Fatalf("label: %q", s.Label)
 	}
 }
@@ -166,5 +184,14 @@ func TestBuildWorkosSession(t *testing.T) {
 func TestDefaultTimeoutAllowsClaudeUsage(t *testing.T) {
 	if DefaultTimeout < 6*time.Second {
 		t.Fatalf("DefaultTimeout too short for claude /usage: %v", DefaultTimeout)
+	}
+}
+
+func TestFormatLegend(t *testing.T) {
+	leg := FormatLegend(map[string]Snapshot{})
+	for _, want := range []string{"week", "session", "billing-period", "Claude"} {
+		if !strings.Contains(leg, want) {
+			t.Fatalf("legend missing %q:\n%s", want, leg)
+		}
 	}
 }

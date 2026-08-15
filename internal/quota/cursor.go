@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -52,31 +53,42 @@ func defaultHTTPDo(req *http.Request) (*http.Response, error) {
 func probeCursor(ctx context.Context) Snapshot {
 	token, err := readCursorAccessToken()
 	if err != nil || token == "" {
-		return Snapshot{
-			Provider: "cursor",
-			Label:    "—",
-			Source:   "unknown",
-			Err:      errString(err, "no cursor token"),
+		s := Snapshot{
+			Provider:          "cursor",
+			Source:            "unknown",
+			UnavailableReason: "Cursor not signed in locally (no state.vscdb token)",
+			Err:               errString(err, "no cursor token"),
 		}
+		s.Label = FormatLabel(s)
+		return s
 	}
 
-	used, err := fetchCursorPercentUsed(ctx, token)
+	info, err := fetchCursorUsage(ctx, token)
 	if err != nil {
-		return Snapshot{
-			Provider: "cursor",
-			Label:    "—",
-			Source:   "unknown",
-			Err:      err.Error(),
+		s := Snapshot{
+			Provider:          "cursor",
+			Source:            "unknown",
+			UnavailableReason: "Cursor usage API unavailable",
+			Err:               err.Error(),
 		}
+		s.Label = FormatLabel(s)
+		return s
 	}
-	remaining := clampPct(100 - used)
+	remaining := clampPct(100 - info.PercentUsed)
 	s := Snapshot{
 		Provider:     "cursor",
 		RemainingPct: &remaining,
+		Window:       "billing-period",
+		ResetHint:    info.ResetHint,
 		Source:       "cursor-api",
 	}
 	s.Label = FormatLabel(s)
 	return s
+}
+
+type cursorUsageInfo struct {
+	PercentUsed float64
+	ResetHint   string
 }
 
 func errString(err error, fallback string) string {
@@ -150,8 +162,10 @@ type planUsageRaw struct {
 }
 
 type currentPeriodUsageRaw struct {
-	PlanUsage *planUsageRaw `json:"planUsage"`
-	Enabled   *bool         `json:"enabled"`
+	BillingCycleStart *string       `json:"billingCycleStart"`
+	BillingCycleEnd   *string       `json:"billingCycleEnd"`
+	PlanUsage         *planUsageRaw `json:"planUsage"`
+	Enabled           *bool         `json:"enabled"`
 }
 
 type requestUsageRaw struct {
@@ -162,16 +176,24 @@ type requestUsageRaw struct {
 }
 
 func fetchCursorPercentUsed(ctx context.Context, token string) (float64, error) {
+	info, err := fetchCursorUsage(ctx, token)
+	if err != nil {
+		return 0, err
+	}
+	return info.PercentUsed, nil
+}
+
+func fetchCursorUsage(ctx context.Context, token string) (cursorUsageInfo, error) {
 	usageURL := cursorAPIBase + cursorDashboardSvc + "/GetCurrentPeriodUsage"
 	planURL := cursorAPIBase + cursorDashboardSvc + "/GetPlanInfo"
 
 	usageRaw, err := postCursorJSON(ctx, usageURL, token)
 	if err != nil {
-		return 0, err
+		return cursorUsageInfo{}, err
 	}
 	var usage currentPeriodUsageRaw
 	if err := json.Unmarshal(usageRaw, &usage); err != nil {
-		return 0, err
+		return cursorUsageInfo{}, err
 	}
 
 	planName := "Pro"
@@ -186,22 +208,35 @@ func fetchCursorPercentUsed(ctx context.Context, token string) (float64, error) 
 		}
 	}
 
+	reset := billingResetHint(usage.BillingCycleEnd)
+
 	if usage.PlanUsage != nil && usage.PlanUsage.TotalPercentUsed != nil {
-		return *usage.PlanUsage.TotalPercentUsed, nil
+		return cursorUsageInfo{PercentUsed: *usage.PlanUsage.TotalPercentUsed, ResetHint: reset}, nil
 	}
 	if usage.PlanUsage != nil {
 		if pct := derivePercentUsed(usage.PlanUsage); pct != nil {
-			return *pct, nil
+			return cursorUsageInfo{PercentUsed: *pct, ResetHint: reset}, nil
 		}
 	}
 
-	// Team / disabled plan fallback → request-based REST usage.
 	if isTeamPlan(planName) || usage.Enabled != nil && !*usage.Enabled || usage.PlanUsage == nil {
 		if reqPct, err := fetchCursorRequestPercentUsed(ctx, token); err == nil {
-			return reqPct, nil
+			return cursorUsageInfo{PercentUsed: reqPct, ResetHint: reset}, nil
 		}
 	}
-	return 0, fmt.Errorf("cursor usage unavailable")
+	return cursorUsageInfo{}, fmt.Errorf("cursor usage unavailable")
+}
+
+func billingResetHint(endMs *string) string {
+	if endMs == nil || strings.TrimSpace(*endMs) == "" {
+		return ""
+	}
+	ms, err := strconv.ParseInt(strings.TrimSpace(*endMs), 10, 64)
+	if err != nil || ms <= 0 {
+		return ""
+	}
+	t := time.UnixMilli(ms)
+	return "resets " + t.Format("Jan 2")
 }
 
 func derivePercentUsed(p *planUsageRaw) *float64 {
