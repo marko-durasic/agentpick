@@ -1,8 +1,16 @@
 # Bang-for-buck defaults for coding-agent CLIs.
 # Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
-version: 2
-updated: "2026-08-10"
+version: 3
+updated: "2026-08-15"
 providers:
+  cursor:
+    binary: cursor-agent
+    display: Cursor Agent
+    # No Headroom wrap — Cursor uses its own auth/endpoint; Anthropic Headroom
+    # proxy is the wrong lane (same rationale as agy / grok).
+    passthrough: ["--model", "auto"]
+    summary: "Auto · quota-smart default"
+    why: "Auto is the Cursor value/quota-efficient lane for interactive agent runs"
   claude:
     binary: claude
     display: Claude Code
