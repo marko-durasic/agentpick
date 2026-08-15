@@ -8,7 +8,7 @@ agentpick list         # show optimal defaults + quota
 agentpick cursor       # Auto · quota-smart default
 agentpick claude       # Opus 5 · 1M · effort high
 agentpick codex        # GPT-5.6 Sol · reasoning high
-agentpick grok         # grok-4.5 · effort high
+agentpick grok         # grok-4.6 · effort high · native
 agentpick copilot      # gpt-5.6-luna · subscription
 agentpick agy          # gemini-3.6-flash-high · effort high
 agentpick ollama       # qwen3.5:4b · local tiny/helper (not coding default)
@@ -97,7 +97,7 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 | `cursor` | Auto · `--model auto` | native only | billing-period % left |
 | `claude` | Opus 5 · `--1m` · effort high | `wrap claude` | week % left (+ session detail) |
 | `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` | week % via Codex usage API |
-| `grok` | grok-4.5 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | CLI scrape (often status-only) |
+| `grok` | grok-4.6 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | CLI scrape (often status-only) |
 | `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` | month / AI credits via CLI scrape |
 | `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | CLI scrape (often status-only) |
 | `ollama` | qwen3.5:4b · local tiny/helper | none (local) | no quota probe |
