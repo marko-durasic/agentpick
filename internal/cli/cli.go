@@ -102,15 +102,14 @@ func newListCmd() *cobra.Command {
 				if display == "" {
 					display = name
 				}
-				q := quotaLabel(snaps, name)
-				fmt.Fprintf(cmd.OutOrStdout(), "  %-8s  %s\n", name, display)
-				fmt.Fprintf(cmd.OutOrStdout(), "            %s · %s · %s · quota %s\n", p.Summary, avail, wrap, q)
-				fmt.Fprintf(cmd.OutOrStdout(), "            why: %s\n\n", p.Why)
+				snap := snaps[name]
+				fmt.Fprintf(cmd.OutOrStdout(), "  %-8s  %s (%s)\n", name, display, avail)
+				fmt.Fprintf(cmd.OutOrStdout(), "            model:  %s\n", p.Summary)
+				fmt.Fprintf(cmd.OutOrStdout(), "            launch: %s\n", wrap)
+				fmt.Fprintf(cmd.OutOrStdout(), "            quota:  %s\n", quota.FormatLabel(snap))
+				fmt.Fprintf(cmd.OutOrStdout(), "            why:    %s\n\n", p.Why)
 			}
-			if sug := quota.Suggest(snaps, reg.Names()); sug != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "Suggested: %s (most left among known)\n", sug)
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "quota: Cursor + Claude when available; others n/a until a probe exists")
+			fmt.Fprintln(cmd.OutOrStdout(), quota.FormatLegend(snaps))
 			return nil
 		},
 	}
@@ -265,15 +264,16 @@ func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, 
 	}
 	snaps := fetchQuotaFor(names)
 
-	fmt.Fprintln(out, "Select a coding agent (bang-for-buck + remaining quota):")
+	fmt.Fprintln(out, "Select a coding agent")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "  "+quota.FormatPickerHeader())
+	fmt.Fprintln(out, "  "+strings.Repeat("─", 78))
 	for i, r := range rows {
-		q := quotaLabel(snaps, r.name)
-		fmt.Fprintf(out, "  %d) %-8s  %s · %s\n", i+1, r.name, r.p.Summary, q)
+		snap := snaps[r.name]
+		fmt.Fprintln(out, "  "+quota.FormatPickerRow(i+1, r.name, r.p.Summary, snap))
 	}
-	if sug := quota.Suggest(snaps, names); sug != "" {
-		fmt.Fprintf(out, "Suggested: %s (most left among known)\n", sug)
-	}
-	fmt.Fprintln(out, "quota: Cursor + Claude when available; others n/a until a probe exists")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, quota.FormatLegend(snaps))
 	fmt.Fprint(out, "Choice [1]: ")
 
 	scanner := bufio.NewScanner(in)
@@ -301,13 +301,6 @@ func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, 
 
 func fetchQuotaFor(names []string) map[string]quota.Snapshot {
 	return quota.FetchAll(context.Background(), quota.FetchOptions{Providers: names})
-}
-
-func quotaLabel(snaps map[string]quota.Snapshot, name string) string {
-	if s, ok := snaps[name]; ok && s.Label != "" {
-		return s.Label
-	}
-	return "n/a"
 }
 
 // Execute runs the root command.

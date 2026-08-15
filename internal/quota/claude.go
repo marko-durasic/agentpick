@@ -4,18 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 var (
-	claudeLookPath = exec.LookPath
-	claudeRun      = defaultClaudeRun
-	weekUsedRE     = regexp.MustCompile(`(?i)Current week[^\n]*?(\d+(?:\.\d+)?)\s*%\s*used`)
-	sessionUsedRE  = regexp.MustCompile(`(?i)Current session[^\n]*?(\d+(?:\.\d+)?)\s*%\s*used`)
+	claudeLookPath    = exec.LookPath
+	claudeRun         = defaultClaudeRun
+	weekUsedRE        = regexp.MustCompile(`(?i)Current week[^\n]*?(\d+(?:\.\d+)?)\s*%\s*used`)
+	sessionUsedRE     = regexp.MustCompile(`(?i)Current session[^\n]*?(\d+(?:\.\d+)?)\s*%\s*used`)
+	weekResetRE       = regexp.MustCompile(`(?i)Current week[^\n]*?resets\s+([^\n(]+)`)
+	sessionResetRE    = regexp.MustCompile(`(?i)Current session[^\n]*?resets\s+([^\n(]+)`)
 	claudeHistoryPath = defaultClaudeHistoryPath
 )
 
@@ -40,8 +44,6 @@ func defaultClaudeHistoryPath() string {
 }
 
 func probeClaude(ctx context.Context) Snapshot {
-	// Prefer live /usage (week is the decision signal). Local history is a fast
-	// session fallback when the CLI is slow or killed by timeout.
 	if s, ok := probeClaudeUsage(ctx); ok {
 		return s
 	}
@@ -49,10 +51,11 @@ func probeClaude(ctx context.Context) Snapshot {
 		return s
 	}
 	return Snapshot{
-		Provider: "claude",
-		Label:    "n/a",
-		Source:   "unknown",
-		Err:      "claude usage unavailable",
+		Provider:          "claude",
+		Source:            "unknown",
+		UnavailableReason: "Claude /usage unavailable (not on PATH or timed out)",
+		Label:             FormatLabel(Snapshot{UnavailableReason: "Claude /usage unavailable (not on PATH or timed out)"}),
+		Err:               "claude usage unavailable",
 	}
 }
 
@@ -69,13 +72,25 @@ func probeClaudeUsage(ctx context.Context) (Snapshot, bool) {
 	if out == "" {
 		return Snapshot{}, false
 	}
-	// Prefer week even if the process was killed after printing (partial OK).
-	if week, ok := parseClaudeWeekUsed(out); ok {
+
+	week, weekOK := parseClaudeWeekUsed(out)
+	session, sessionOK := parseClaudeSessionUsed(out)
+	weekReset := cleanReset(parseReset(weekResetRE, out))
+	sessionReset := cleanReset(parseReset(sessionResetRE, out))
+
+	if weekOK {
 		remaining := clampPct(100 - week)
 		s := Snapshot{
 			Provider:     "claude",
 			RemainingPct: &remaining,
+			Window:       "week",
+			ResetHint:    weekReset,
 			Source:       "claude-usage",
+		}
+		if sessionOK {
+			sessLeft := clampPct(100 - session)
+			detail := fmtSessionDetail(sessLeft, sessionReset)
+			s.Detail = detail
 		}
 		if err != nil {
 			s.Err = err.Error()
@@ -83,11 +98,13 @@ func probeClaudeUsage(ctx context.Context) (Snapshot, bool) {
 		s.Label = FormatLabel(s)
 		return s, true
 	}
-	if session, ok := parseClaudeSessionUsed(out); ok {
+	if sessionOK {
 		remaining := clampPct(100 - session)
 		s := Snapshot{
 			Provider:     "claude",
 			RemainingPct: &remaining,
+			Window:       "session",
+			ResetHint:    sessionReset,
 			Source:       "claude-session",
 		}
 		s.Label = FormatLabel(s)
@@ -95,6 +112,14 @@ func probeClaudeUsage(ctx context.Context) (Snapshot, bool) {
 	}
 	_ = err
 	return Snapshot{}, false
+}
+
+func fmtSessionDetail(left float64, reset string) string {
+	d := fmt.Sprintf("session %.0f%% left", left)
+	if reset != "" {
+		d += " (" + reset + ")"
+	}
+	return d
 }
 
 func probeClaudeSessionHistory() (Snapshot, bool) {
@@ -109,7 +134,7 @@ func probeClaudeSessionHistory() (Snapshot, bool) {
 	var doc struct {
 		Samples []struct {
 			U struct {
-				FH *float64 `json:"fh"` // five-hour / session window % used
+				FH *float64 `json:"fh"`
 			} `json:"u"`
 		} `json:"samples"`
 	}
@@ -124,7 +149,9 @@ func probeClaudeSessionHistory() (Snapshot, bool) {
 	s := Snapshot{
 		Provider:     "claude",
 		RemainingPct: &remaining,
+		Window:       "session",
 		Source:       "claude-history",
+		Detail:       "from local Claude history",
 	}
 	s.Label = FormatLabel(s)
 	return s, true
@@ -152,4 +179,29 @@ func parseClaudeSessionUsed(out string) (float64, bool) {
 		return 0, false
 	}
 	return v, true
+}
+
+func parseReset(re *regexp.Regexp, out string) string {
+	m := re.FindStringSubmatch(out)
+	if len(m) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+func cleanReset(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, "· ")
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	if !strings.HasPrefix(strings.ToLower(s), "resets") {
+		s = "resets " + s
+	}
+	// Keep it short for the table.
+	if len(s) > 28 {
+		s = s[:28]
+	}
+	return s
 }
