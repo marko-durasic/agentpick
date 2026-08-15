@@ -12,7 +12,7 @@ func TestLoad(t *testing.T) {
 	if reg.Version < 1 {
 		t.Fatalf("version: got %d", reg.Version)
 	}
-	want := []string{"agy", "claude", "codex", "copilot", "cursor", "grok"}
+	want := []string{"agy", "claude", "codex", "copilot", "cursor", "grok", "ollama"}
 	got := reg.Names()
 	if len(got) != len(want) {
 		t.Fatalf("names: got %v want %v", got, want)
@@ -55,5 +55,15 @@ func TestLoad(t *testing.T) {
 	}
 	if grok.HeadroomWrap != "" {
 		t.Fatalf("grok must launch native (empty headroom_wrap), got %q", grok.HeadroomWrap)
+	}
+	ollama, ok := reg.Get("ollama")
+	if !ok {
+		t.Fatal("missing ollama")
+	}
+	if ollama.Binary != "ollama" || ollama.HeadroomWrap != "" {
+		t.Fatalf("ollama: %+v", ollama)
+	}
+	if len(ollama.Passthrough) < 2 || ollama.Passthrough[0] != "run" || ollama.Passthrough[1] != "qwen3.5:4b" {
+		t.Fatalf("ollama passthrough: %v", ollama.Passthrough)
 	}
 }
