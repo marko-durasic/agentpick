@@ -1,6 +1,7 @@
 package quota
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -54,7 +55,7 @@ func TestParseCodexAPI(t *testing.T) {
 	}
 	codexAuthPath = func() string { return auth }
 
-	s, ok := probeCodexAPI(t.Context())
+	s, ok := probeCodexAPI(context.Background())
 	if !ok || s.RemainingPct == nil || *s.RemainingPct != 0 {
 		t.Fatalf("api: ok=%v %+v", ok, s)
 	}
