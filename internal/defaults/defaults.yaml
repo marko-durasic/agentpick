@@ -1,8 +1,16 @@
 # Bang-for-buck defaults for coding-agent CLIs.
 # Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
-version: 3
-updated: "2026-08-13"
+version: 5
+updated: "2026-08-15"
 providers:
+  cursor:
+    binary: cursor-agent
+    display: Cursor Agent
+    # No Headroom wrap — Cursor uses its own auth/endpoint; Anthropic Headroom
+    # proxy is the wrong lane (same rationale as agy / grok).
+    passthrough: ["--model", "auto"]
+    summary: "Auto · quota-smart default"
+    why: "Auto is the Cursor value/quota-efficient lane for interactive agent runs"
   claude:
     binary: claude
     display: Claude Code
@@ -51,3 +59,10 @@ providers:
     passthrough: ["--model", "gemini-3.6-flash-high", "--effort", "high"]
     summary: "gemini-3.6-flash-high · effort high"
     why: "Best Gemini value tier on Antigravity; use gemini-3.1-pro-high for heavier reasoning"
+  ollama:
+    binary: ollama
+    display: Ollama (local)
+    # No Headroom — local inference, not a SaaS coding CLI.
+    passthrough: ["run", "qwen3.5:4b"]
+    summary: "qwen3.5:4b · local · tiny/helper (weak GPU OK)"
+    why: "Local tiny classify/format/helper jobs on weak GPUs or offline — NOT bang-for-buck agentic coding; use cursor/claude/codex/agy/grok/copilot for real coding work"

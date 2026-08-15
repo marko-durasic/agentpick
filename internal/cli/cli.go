@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/marko-durasic/agentpick/internal/defaults"
 	"github.com/marko-durasic/agentpick/internal/launch"
+	"github.com/marko-durasic/agentpick/internal/quota"
 	"github.com/marko-durasic/agentpick/internal/tokensync"
 	"github.com/spf13/cobra"
 )
@@ -23,7 +25,7 @@ func NewRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "agentpick",
 		Short: "Launch coding agents with bang-for-buck defaults",
-		Long: `agentpick launches Claude, Codex, Grok, Copilot, or Antigravity
+		Long: `agentpick launches Cursor, Claude, Codex, Grok, Copilot, or Antigravity
 with opinionated optimal model/effort settings.
 
 When Headroom is installed, eligible providers run through
@@ -35,7 +37,8 @@ When tokensave is installed, agentpick runs
 on every indexed project before launch so the code graph stays ready.
 Use --no-tokensave to skip.
 
-Run with no arguments for an interactive provider picker.
+Run with no arguments for an interactive provider picker (shows remaining
+quota when probes succeed).
 
 Global flags may appear before the provider name:
   agentpick --dry-run claude
@@ -80,6 +83,8 @@ func newListCmd() *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "agentpick defaults (v%d, updated %s)\n", reg.Version, reg.Updated)
 			fmt.Fprintf(cmd.OutOrStdout(), "headroom on PATH: %v\n", hr)
 			fmt.Fprintf(cmd.OutOrStdout(), "tokensave on PATH: %v (preflight sync all projects)\n\n", ts)
+
+			snaps := fetchQuotaFor(reg.Names())
 			for _, name := range reg.Names() {
 				p := reg.Providers[name]
 				avail := "missing"
@@ -97,10 +102,14 @@ func newListCmd() *cobra.Command {
 				if display == "" {
 					display = name
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "  %-8s  %s\n", name, display)
-				fmt.Fprintf(cmd.OutOrStdout(), "            %s · %s · %s\n", p.Summary, avail, wrap)
-				fmt.Fprintf(cmd.OutOrStdout(), "            why: %s\n\n", p.Why)
+				snap := snaps[name]
+				fmt.Fprintf(cmd.OutOrStdout(), "  %-8s  %s (%s)\n", name, display, avail)
+				fmt.Fprintf(cmd.OutOrStdout(), "            model:  %s\n", p.Summary)
+				fmt.Fprintf(cmd.OutOrStdout(), "            launch: %s\n", wrap)
+				fmt.Fprintf(cmd.OutOrStdout(), "            quota:  %s\n", quota.FormatLabel(snap))
+				fmt.Fprintf(cmd.OutOrStdout(), "            why:    %s\n\n", p.Why)
 			}
+			fmt.Fprintln(cmd.OutOrStdout(), quota.FormatLegend(snaps))
 			return nil
 		},
 	}
@@ -246,13 +255,25 @@ func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, 
 		rows = append(rows, row{name: name, p: p})
 	}
 	if len(rows) == 0 {
-		return "", fmt.Errorf("no supported agent CLIs found on PATH (install claude, codex, grok, copilot, and/or agy)")
+		return "", fmt.Errorf("no supported agent CLIs found on PATH (install cursor-agent, claude, codex, grok, copilot, and/or agy)")
 	}
 
-	fmt.Fprintln(out, "Select a coding agent (bang-for-buck defaults):")
+	names := make([]string, len(rows))
 	for i, r := range rows {
-		fmt.Fprintf(out, "  %d) %-8s  %s\n", i+1, r.name, r.p.Summary)
+		names[i] = r.name
 	}
+	snaps := fetchQuotaFor(names)
+
+	fmt.Fprintln(out, "Select a coding agent")
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "  "+quota.FormatPickerHeader())
+	fmt.Fprintln(out, "  "+strings.Repeat("─", 78))
+	for i, r := range rows {
+		snap := snaps[r.name]
+		fmt.Fprintln(out, "  "+quota.FormatPickerRow(i+1, r.name, r.p.Summary, snap))
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, quota.FormatLegend(snaps))
 	fmt.Fprint(out, "Choice [1]: ")
 
 	scanner := bufio.NewScanner(in)
@@ -276,6 +297,10 @@ func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, 
 		return "", fmt.Errorf("invalid choice %q", line)
 	}
 	return rows[n-1].name, nil
+}
+
+func fetchQuotaFor(names []string) map[string]quota.Snapshot {
+	return quota.FetchAll(context.Background(), quota.FetchOptions{Providers: names})
 }
 
 // Execute runs the root command.

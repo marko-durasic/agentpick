@@ -37,9 +37,11 @@ EOF
 install_alias hclaude  "claude"
 install_alias hopus    "claude"
 install_alias hcodex   "codex"
+install_alias hcursor  "cursor"
 install_alias hgrok    "grok"
 install_alias hcopilot "copilot"
 install_alias hagy     "agy"
+install_alias hollama  "ollama"
 
 cat >"$BIN_DIR/hagents" <<EOF
 #!/usr/bin/env bash
