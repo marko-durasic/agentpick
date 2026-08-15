@@ -11,6 +11,7 @@ agentpick codex        # GPT-5.6 Sol · reasoning high
 agentpick grok         # grok-4.5 · effort high
 agentpick copilot      # gpt-5.6-luna · subscription
 agentpick agy          # gemini-3.6-flash-high · effort high
+agentpick ollama       # qwen3.5:4b · local tiny/helper (not coding default)
 ```
 
 ## Why
@@ -61,7 +62,7 @@ cd agentpick
 ./install.sh
 ```
 
-Installs `~/.local/bin/agentpick` plus short aliases: `hcursor`, `hclaude`, `hopus`, `hcodex`, `hgrok`, `hcopilot`, `hagy`, `hagents` (→ `list`). Existing non-symlink scripts are backed up as `*.pre-agentpick`.
+Installs `~/.local/bin/agentpick` plus short aliases: `hcursor`, `hclaude`, `hopus`, `hcodex`, `hgrok`, `hcopilot`, `hagy`, `hollama`, `hagents` (→ `list`). Existing non-symlink scripts are backed up as `*.pre-agentpick`.
 
 ## Usage
 
@@ -89,7 +90,7 @@ Edit [`defaults.yaml`](defaults.yaml) (symlink to [`internal/defaults/defaults.y
 
 Each provider entry has a one-line `why` — keep that honest when you change models.
 
-## Providers (v3)
+## Providers (v4)
 
 | Provider | Default | Headroom | Quota probe |
 |----------|---------|----------|-------------|
@@ -99,6 +100,15 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 | `grok` | grok-4.5 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | CLI scrape (often status-only) |
 | `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` | month / AI credits via CLI scrape |
 | `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | CLI scrape (often status-only) |
+| `ollama` | qwen3.5:4b · local tiny/helper | none (local) | no quota probe |
+
+## Local / tiny (not optimal coding)
+
+`ollama` launches a local model (default `qwen3.5:4b`) for tiny classify/format/helper
+jobs when you do not have a powerful GPU/laptop, or want offline help. It is listed for
+convenience; it is **not** the bang-for-buck coding default — use `cursor` / `claude` /
+`codex` / … for real agent work. On weaker machines prefer smaller tags (`llama3.2:3b`
+etc.) by passing args after `--` if supported, or change the defaults.yaml model.
 
 ## License
 
