@@ -36,7 +36,7 @@ func TestListSmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := buf.String()
-	for _, want := range []string{"claude", "codex", "grok", "copilot", "agy", "why:"} {
+	for _, want := range []string{"claude", "codex", "cursor", "grok", "copilot", "agy", "why:"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("list missing %q in:\n%s", want, out)
 		}
