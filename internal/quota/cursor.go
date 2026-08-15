@@ -46,7 +46,7 @@ func defaultSqliteRun(dbPath, sql string) (string, error) {
 }
 
 func defaultHTTPDo(req *http.Request) (*http.Response, error) {
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := &http.Client{Timeout: 8 * time.Second}
 	return client.Do(req)
 }
 

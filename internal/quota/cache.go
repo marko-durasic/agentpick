@@ -55,12 +55,12 @@ func saveCache(items map[string]Snapshot, now time.Time) {
 		}
 	}
 	for k, v := range items {
-		if v.RemainingPct != nil {
+		if quotaKnown(v) {
 			merged[k] = v
 			continue
 		}
 		// Do not clobber a good cached remaining % with a failed probe.
-		if prev, ok := merged[k]; ok && prev.RemainingPct != nil {
+		if prev, ok := merged[k]; ok && quotaKnown(prev) {
 			continue
 		}
 		merged[k] = v

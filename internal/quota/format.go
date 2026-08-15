@@ -36,17 +36,7 @@ func unknownSnapshot(name string) Snapshot {
 
 func unavailableReason(name string) string {
 	switch name {
-	case "codex":
-		return "no public quota API (ChatGPT usage blocked)"
-	case "copilot":
-		return "no non-interactive billing probe"
-	case "grok":
-		return "no public quota API"
-	case "agy":
-		return "no public quota API"
-	case "claude":
-		return "usage probe failed"
-	case "cursor":
+	case "codex", "copilot", "grok", "agy", "claude", "cursor":
 		return "usage probe failed"
 	default:
 		return "no quota probe yet"
@@ -56,6 +46,9 @@ func unavailableReason(name string) string {
 // FormatLabel builds the primary quota cell for a snapshot.
 func FormatLabel(s Snapshot) string {
 	if s.RemainingPct == nil {
+		if s.Label != "" {
+			return s.Label
+		}
 		if s.UnavailableReason != "" {
 			return s.UnavailableReason
 		}
@@ -84,12 +77,22 @@ func defaultWindow(s Snapshot) string {
 		return "session"
 	case "cursor-api":
 		return "billing-period"
+	case "codex-api", "codex-exec":
+		return "week"
+	case "copilot-cli":
+		return "month"
 	default:
 		if s.Provider == "claude" {
 			return "week"
 		}
 		if s.Provider == "cursor" {
 			return "billing-period"
+		}
+		if s.Provider == "codex" {
+			return "week"
+		}
+		if s.Provider == "copilot" {
+			return "month"
 		}
 		return "quota"
 	}
@@ -129,10 +132,11 @@ func FormatPickerRow(num int, agent, model string, snap Snapshot) string {
 func FormatLegend(snaps map[string]Snapshot) string {
 	var b strings.Builder
 	b.WriteString("How to read remaining quota\n")
-	b.WriteString("  week           Claude Code weekly plan limit (not monthly)\n")
+	b.WriteString("  week           Claude / Codex primary window (often ~7 days)\n")
 	b.WriteString("  session        Claude rolling session window (~5h)\n")
 	b.WriteString("  billing-period Cursor plan usage for the current billing cycle\n")
-	b.WriteString("  no public…     CLI has no reliable non-interactive quota endpoint yet\n")
+	b.WriteString("  month          Copilot monthly quota (when CLI reports it)\n")
+	b.WriteString("  available…     Probe ran OK but CLI/API exposed no percentage\n")
 	if sug := Suggest(snaps, orderedKnown(snaps)); sug != "" {
 		b.WriteString("Suggested: ")
 		b.WriteString(sug)
