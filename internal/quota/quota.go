@@ -10,9 +10,8 @@ import (
 
 const (
 	// DefaultTimeout caps how long FetchAll waits for live probes.
-	// Claude `claude /usage` is ~4–5s on a warm machine; 3.5s killed the probe
-	// (signal: killed) and left Claude empty while Cursor still showed %.
-	DefaultTimeout = 8 * time.Second
+	// Claude /usage ~4–5s; Copilot -p scrape ~7s. Parallel, so wall clock ≈ slowest.
+	DefaultTimeout = 20 * time.Second
 	// CacheTTL keeps re-picks fast.
 	CacheTTL = 120 * time.Second
 )
@@ -82,7 +81,7 @@ func FetchAll(ctx context.Context, opt FetchOptions) map[string]Snapshot {
 		}
 		if !opt.SkipCache {
 			if cached, ok := loadCache(now()); ok {
-				if s, hit := cached[name]; hit && s.RemainingPct != nil {
+				if s, hit := cached[name]; hit && quotaKnown(s) {
 					continue
 				}
 			}
@@ -112,11 +111,19 @@ func allKnownCached(names []string, cached map[string]Snapshot) bool {
 			continue
 		}
 		s, ok := cached[name]
-		if !ok || s.RemainingPct == nil {
+		if !ok || !quotaKnown(s) {
 			return false
 		}
 	}
 	return true
+}
+
+func quotaKnown(s Snapshot) bool {
+	if s.RemainingPct != nil {
+		return true
+	}
+	// Status-only probes (e.g. "available · no % exposed").
+	return s.Source != "" && s.Source != "unknown" && s.Label != ""
 }
 
 type probeFn func(ctx context.Context) Snapshot
@@ -127,6 +134,14 @@ func probeFor(name string) probeFn {
 		return probeCursor
 	case "claude":
 		return probeClaude
+	case "codex":
+		return probeCodex
+	case "copilot":
+		return probeCopilot
+	case "grok":
+		return probeGrok
+	case "agy":
+		return probeAgy
 	default:
 		return nil
 	}

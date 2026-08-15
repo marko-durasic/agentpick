@@ -25,11 +25,23 @@ The interactive picker and `list` show **remaining quota** with explicit windows
 
 | Window | Meaning |
 |--------|---------|
-| `week` | Claude Code **weekly** plan limit (not monthly) |
+| `week` | Claude weekly plan **or** Codex primary window (~7 days) |
 | `session` | Claude rolling session window (~5 hours) |
 | `billing-period` | Cursor plan usage for the **current billing cycle** |
+| `month` | Copilot monthly quota (when the CLI reports it) |
+| `available…` | Probe succeeded but that CLI/API exposed no percentage |
 
-Providers without a reliable non-interactive quota API show a short reason (e.g. `no public quota API`) instead of a cryptic `n/a`. Probes run in parallel (~8s timeout) and cache for ~2 minutes under `~/.cache/agentpick/`.
+**How we probe**
+
+| Provider | Method |
+|----------|--------|
+| Cursor | Local token + Cursor usage API |
+| Claude | `claude /usage` (+ local session history fallback) |
+| Codex | ChatGPT `codex/usage` API from `~/.codex/auth.json` (fallback: tiny `codex exec` when API forbids) |
+| Copilot | Tiny `copilot -p` scrape (`monthly quota` / `AI Credits N`) |
+| Grok / agy | Tiny print/single prompt; report available vs limit errors (usually no %) |
+
+Probes run in parallel (~20s timeout) and cache for ~2 minutes under `~/.cache/agentpick/`.
 
 `headroom wrap` hardcodes `--port` default **8787** (and ignores `HEADROOM_PORT` for that flag). Port **8787** is also Cursor’s `mcp login` OAuth callback, so agentpick always passes an explicit `--port` (long form — `wrap claude` has no `-p`, and Claude itself uses `-p` for prompts):
 
@@ -83,10 +95,10 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 |----------|---------|----------|-------------|
 | `cursor` | Auto · `--model auto` | native only | billing-period % left |
 | `claude` | Opus 5 · `--1m` · effort high | `wrap claude` | week % left (+ session detail) |
-| `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` | no public quota API |
-| `grok` | grok-4.5 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | no public quota API |
-| `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` | no non-interactive billing probe |
-| `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | no public quota API |
+| `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` | week % via Codex usage API |
+| `grok` | grok-4.5 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | CLI scrape (often status-only) |
+| `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` | month / AI credits via CLI scrape |
+| `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | CLI scrape (often status-only) |
 
 ## License
 
