@@ -3,6 +3,7 @@ package quota
 import (
 	"context"
 	"encoding/base64"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,9 +18,13 @@ func TestFormatLabel(t *testing.T) {
 	}
 	s = Snapshot{Provider: "claude", RemainingPct: &pct, Source: "claude-usage"}
 	if got := FormatLabel(s); got != "week 72% left" {
-		t.Fatalf("claude: got %q", got)
+		t.Fatalf("claude week: got %q", got)
 	}
-	if got := FormatLabel(Snapshot{Provider: "codex"}); got != "—" {
+	s = Snapshot{Provider: "claude", RemainingPct: &pct, Source: "claude-history"}
+	if got := FormatLabel(s); got != "session 72% left" {
+		t.Fatalf("claude session: got %q", got)
+	}
+	if got := FormatLabel(Snapshot{Provider: "codex"}); got != "n/a" {
 		t.Fatalf("unknown: got %q", got)
 	}
 }
@@ -31,6 +36,10 @@ Current week (all models): 58% used · resets Aug 18
 	pct, ok := parseClaudeWeekUsed(out)
 	if !ok || pct != 58 {
 		t.Fatalf("got pct=%v ok=%v", pct, ok)
+	}
+	sess, ok := parseClaudeSessionUsed(out)
+	if !ok || sess != 100 {
+		t.Fatalf("session: got pct=%v ok=%v", sess, ok)
 	}
 }
 
@@ -69,6 +78,23 @@ func TestCacheRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveCacheKeepsGoodOnFailedProbe(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AGENTPICK_CACHE_DIR", dir)
+	now := time.Date(2026, 8, 15, 2, 0, 0, 0, time.UTC)
+	pct := 42.0
+	saveCache(map[string]Snapshot{
+		"claude": {Provider: "claude", RemainingPct: &pct, Label: "week 42% left", Source: "claude-usage"},
+	}, now)
+	saveCache(map[string]Snapshot{
+		"claude": {Provider: "claude", Label: "n/a", Source: "unknown", Err: "signal: killed"},
+	}, now.Add(time.Second))
+	got, ok := loadCache(now.Add(2 * time.Second))
+	if !ok || got["claude"].RemainingPct == nil || *got["claude"].RemainingPct != 42 {
+		t.Fatalf("should keep good claude: ok=%v %+v", ok, got["claude"])
+	}
+}
+
 func TestDerivePercentUsed(t *testing.T) {
 	limit := 1000.0
 	remaining := 250.0
@@ -103,8 +129,28 @@ func TestFetchAllUsesClaudeProbe(t *testing.T) {
 	if !strings.Contains(cl.Label, "week") {
 		t.Fatalf("label: %q", cl.Label)
 	}
-	if snaps["codex"].Label != "—" {
-		t.Fatalf("codex should be unknown: %+v", snaps["codex"])
+	if snaps["codex"].Label != "n/a" {
+		t.Fatalf("codex should be n/a: %+v", snaps["codex"])
+	}
+}
+
+func TestClaudeHistoryFallback(t *testing.T) {
+	dir := t.TempDir()
+	hist := filepath.Join(dir, "plan-usage-history.json")
+	if err := os.WriteFile(hist, []byte(`{"version":2,"samples":[{"t":1,"u":{"fh":90,"sd":20}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldPath, oldLook := claudeHistoryPath, claudeLookPath
+	t.Cleanup(func() { claudeHistoryPath = oldPath; claudeLookPath = oldLook })
+	claudeHistoryPath = func() string { return hist }
+	claudeLookPath = func(string) (string, error) { return "", os.ErrNotExist }
+
+	s := probeClaude(context.Background())
+	if s.RemainingPct == nil || *s.RemainingPct != 10 {
+		t.Fatalf("history fallback: %+v", s)
+	}
+	if s.Label != "session 10% left" {
+		t.Fatalf("label: %q", s.Label)
 	}
 }
 
@@ -114,5 +160,11 @@ func TestBuildWorkosSession(t *testing.T) {
 	sess := buildWorkosSessionCookie(token)
 	if sess == nil || sess.userID != "abc" {
 		t.Fatalf("session: %+v", sess)
+	}
+}
+
+func TestDefaultTimeoutAllowsClaudeUsage(t *testing.T) {
+	if DefaultTimeout < 6*time.Second {
+		t.Fatalf("DefaultTimeout too short for claude /usage: %v", DefaultTimeout)
 	}
 }

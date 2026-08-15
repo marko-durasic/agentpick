@@ -55,11 +55,15 @@ func saveCache(items map[string]Snapshot, now time.Time) {
 		}
 	}
 	for k, v := range items {
-		if v.RemainingPct != nil || v.Source != "unknown" {
+		if v.RemainingPct != nil {
 			merged[k] = v
-		} else if _, exists := merged[k]; !exists {
-			merged[k] = v
+			continue
 		}
+		// Do not clobber a good cached remaining % with a failed probe.
+		if prev, ok := merged[k]; ok && prev.RemainingPct != nil {
+			continue
+		}
+		merged[k] = v
 	}
 	cf := cacheFile{SavedAt: now, Items: merged}
 	data, err := json.MarshalIndent(cf, "", "  ")

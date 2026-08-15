@@ -11,7 +11,9 @@ import (
 
 const (
 	// DefaultTimeout caps how long FetchAll waits for live probes.
-	DefaultTimeout = 3500 * time.Millisecond
+	// Claude `claude /usage` is ~4–5s on a warm machine; 3.5s killed the probe
+	// (signal: killed) and left Claude as n/a while Cursor still showed %.
+	DefaultTimeout = 8 * time.Second
 	// CacheTTL keeps re-picks fast.
 	CacheTTL = 120 * time.Second
 )
@@ -142,7 +144,7 @@ func probeFor(name string) probeFn {
 func unknownSnapshot(name string) Snapshot {
 	return Snapshot{
 		Provider: name,
-		Label:    "—",
+		Label:    "n/a",
 		Source:   "unknown",
 	}
 }
@@ -178,10 +180,16 @@ func Suggest(snaps map[string]Snapshot, order []string) string {
 // FormatLabel builds the short quota fragment for a snapshot.
 func FormatLabel(s Snapshot) string {
 	if s.RemainingPct == nil {
-		return "—"
+		return "n/a"
 	}
 	pct := clampPct(*s.RemainingPct)
-	if s.Provider == "claude" || s.Source == "claude-usage" {
+	switch s.Source {
+	case "claude-usage":
+		return fmt.Sprintf("week %.0f%% left", pct)
+	case "claude-session", "claude-history":
+		return fmt.Sprintf("session %.0f%% left", pct)
+	}
+	if s.Provider == "claude" {
 		return fmt.Sprintf("week %.0f%% left", pct)
 	}
 	return fmt.Sprintf("%.0f%% left", pct)
