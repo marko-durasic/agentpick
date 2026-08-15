@@ -110,6 +110,7 @@ func newListCmd() *cobra.Command {
 			if sug := quota.Suggest(snaps, reg.Names()); sug != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "Suggested: %s (most left among known)\n", sug)
 			}
+			fmt.Fprintln(cmd.OutOrStdout(), "quota: Cursor + Claude when available; others n/a until a probe exists")
 			return nil
 		},
 	}
@@ -272,6 +273,7 @@ func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, 
 	if sug := quota.Suggest(snaps, names); sug != "" {
 		fmt.Fprintf(out, "Suggested: %s (most left among known)\n", sug)
 	}
+	fmt.Fprintln(out, "quota: Cursor + Claude when available; others n/a until a probe exists")
 	fmt.Fprint(out, "Choice [1]: ")
 
 	scanner := bufio.NewScanner(in)
@@ -305,7 +307,7 @@ func quotaLabel(snaps map[string]quota.Snapshot, name string) string {
 	if s, ok := snaps[name]; ok && s.Label != "" {
 		return s.Label
 	}
-	return "—"
+	return "n/a"
 }
 
 // Execute runs the root command.

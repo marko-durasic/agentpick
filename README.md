@@ -21,7 +21,7 @@ When [Headroom](https://github.com/headroomlabs-ai/headroom) is on your `PATH`, 
 
 When [tokensave](https://github.com/aovestdipaperino/tokensave) is on your `PATH`, `agentpick` runs `tokensave sync` on **every** indexed project (`tokensave list -a`) before launch so the code graph is ready. Missing tokensave or a sync failure is non-fatal — the agent still starts. Use `--no-tokensave` to skip.
 
-The interactive picker and `list` show **remaining quota** best-effort (Cursor period % and Claude week % today; others show `—`). Probes run in parallel with a short timeout and cache for ~2 minutes under `~/.cache/agentpick/`.
+The interactive picker and `list` show **remaining quota** best-effort (Cursor period % and Claude week % today; others show `n/a`). Probes run in parallel with an ~8s timeout (Claude `/usage` is slow) and cache for ~2 minutes under `~/.cache/agentpick/`. If Claude `/usage` fails, a local session reading from `~/.config/Claude/plan-usage-history.json` is used as fallback.
 
 `headroom wrap` hardcodes `--port` default **8787** (and ignores `HEADROOM_PORT` for that flag). Port **8787** is also Cursor’s `mcp login` OAuth callback, so agentpick always passes an explicit `--port` (long form — `wrap claude` has no `-p`, and Claude itself uses `-p` for prompts):
 
@@ -75,10 +75,10 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 |----------|---------|----------|-------------|
 | `cursor` | Auto · `--model auto` | native only | Cursor period % left |
 | `claude` | Opus 5 · `--1m` · effort high | `wrap claude` | Claude week % left |
-| `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` | — |
-| `grok` | grok-4.5 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | — |
-| `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` | — |
-| `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | — |
+| `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` | n/a |
+| `grok` | grok-4.5 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | n/a |
+| `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` | n/a |
+| `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | n/a |
 
 ## License
 
