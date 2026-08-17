@@ -182,6 +182,7 @@ func Run(ctx context.Context, opt Options) error {
 			return err
 		}
 	}
+	fmt.Fprintf(os.Stderr, "agentpick: CAO session %s — http://%s:%d (new agentpick = new session; AGENTPICK_CAO_SESSION to reuse)\n", plan.SessionName, plan.Host, plan.Port)
 	spawnCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {

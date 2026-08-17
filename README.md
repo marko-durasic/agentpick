@@ -76,7 +76,7 @@ CAO 2.4.1 cannot spawn **Grok** or **Ollama**. agentpick still routes them: the 
 
 This is **full Cursor CLI**, including workspace slash commands from `.cursor/commands` (`/start`, `/wrap-up`, `/do-next`, …). Orchestration **adds** tmux workers; it does not strip CLI features. `agentpick` defaults `--working-directory` to a DuReef tree that has those commands (isolated clone when present), not the agentpick source repo. Override with `--dir` or `AGENTPICK_CAO_WORKDIR`.
 
-UI: [http://127.0.0.1:9889](http://127.0.0.1:9889). Stop: `cao shutdown --all`.
+UI: [http://127.0.0.1:9889](http://127.0.0.1:9889). Each `agentpick` starts a **new** CAO session (unique name) so a second terminal does not collide. Reuse one session with `AGENTPICK_CAO_SESSION=agentpick`. Stop leftover sessions: `cao shutdown --all`.
 
 `dureef-sprint` (scheduled shifts) does **not** start CAO. `agentpick cursor` / `agentpick claude` still launch a single CLI.
 

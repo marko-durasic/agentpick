@@ -13,20 +13,26 @@ import (
 	"time"
 )
 
-// DefaultSessionName is the CAO session agentpick reuses (before the cao- prefix).
-// Shutdown first if leftover.
+// DefaultSessionName is the sticky name used only when AGENTPICK_CAO_SESSION is set
+// to this value (or empty override handling). Live launches mint a unique slug.
 const DefaultSessionName = "agentpick"
 
 // caoSessionPrefix is CAO 2.4.1's tmux/API prefix (SESSION_PREFIX).
-// `cao launch --session-name agentpick` is stored as cao-agentpick.
 const caoSessionPrefix = "cao-"
 
 func sessionName() string {
 	raw := strings.TrimSpace(os.Getenv("AGENTPICK_CAO_SESSION"))
 	if raw == "" {
-		raw = DefaultSessionName
+		raw = newSessionSlug()
 	}
 	return canonicalCAOSession(raw)
+}
+
+// newSessionSlug is unique per launch so a second `agentpick` does not collide
+// with an already-running session. Override with AGENTPICK_CAO_SESSION to reuse.
+func newSessionSlug() string {
+	n := time.Now().UTC()
+	return fmt.Sprintf("agentpick-%s-%x", n.Format("20060102-150405"), n.UnixNano())
 }
 
 // canonicalCAOSession matches CAO's create_terminal prefixing so spawn

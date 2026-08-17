@@ -61,8 +61,8 @@ func TestResolveLaunchArgvNoYoloLoopback(t *testing.T) {
 	if !strings.Contains(joined, "--agents agentpick_supervisor") {
 		t.Fatalf("missing profile: %s", joined)
 	}
-	if !strings.Contains(joined, "--session-name cao-agentpick") {
-		t.Fatalf("missing CAO-prefixed session name: %s", joined)
+	if !strings.Contains(joined, "--session-name cao-agentpick-") {
+		t.Fatalf("missing unique CAO session name: %s", joined)
 	}
 	if !strings.Contains(joined, "/start") || strings.Contains(joined, "no /start") {
 		t.Fatalf("launch prompt should keep slash commands: %s", joined)

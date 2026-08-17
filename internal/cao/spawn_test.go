@@ -3,6 +3,7 @@ package cao
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSpawnTerminalURLLoopback(t *testing.T) {
@@ -59,15 +60,22 @@ func TestCanonicalCAOSessionPrefix(t *testing.T) {
 
 func TestSessionNameUsesCAOPrefix(t *testing.T) {
 	t.Setenv("AGENTPICK_CAO_SESSION", "")
-	if got := sessionName(); got != "cao-agentpick" {
-		t.Fatalf("default %q", got)
+	got := sessionName()
+	if !strings.HasPrefix(got, "cao-agentpick-") {
+		t.Fatalf("default unique session %q", got)
+	}
+	a := newSessionSlug()
+	time.Sleep(time.Millisecond)
+	b := newSessionSlug()
+	if a == b {
+		t.Fatalf("expected unique slugs, both %q", a)
 	}
 	t.Setenv("AGENTPICK_CAO_SESSION", "agentpick")
 	if got := sessionName(); got != "cao-agentpick" {
-		t.Fatalf("unprefixed env %q", got)
+		t.Fatalf("sticky unprefixed env %q", got)
 	}
 	t.Setenv("AGENTPICK_CAO_SESSION", "cao-agentpick")
 	if got := sessionName(); got != "cao-agentpick" {
-		t.Fatalf("prefixed env %q", got)
+		t.Fatalf("sticky prefixed env %q", got)
 	}
 }
