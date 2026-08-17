@@ -19,11 +19,12 @@ const OAuthCallbackPort = 8787
 
 // Options controls how a provider is launched.
 type Options struct {
-	NoHeadroom    bool
-	NoTokensave   bool
-	DryRun        bool
-	ExtraArgs     []string
-	HeadroomPort  int // 0 = resolve from env / default
+	NoHeadroom   bool
+	NoTokensave  bool
+	DryRun       bool
+	ExtraArgs    []string
+	ExtraEnv     map[string]string
+	HeadroomPort int // 0 = resolve from env / default
 }
 
 // Plan is the resolved argv + env for a launch.
@@ -44,6 +45,9 @@ func Resolve(p defaults.Provider, opt Options) (Plan, error) {
 	extra := append([]string{}, opt.ExtraArgs...)
 	env := os.Environ()
 	for k, v := range p.Env {
+		env = setEnv(env, k, v)
+	}
+	for k, v := range opt.ExtraEnv {
 		env = setEnv(env, k, v)
 	}
 

@@ -1,16 +1,27 @@
 # Bang-for-buck defaults for coding-agent CLIs.
 # Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
-version: 5
-updated: "2026-08-15"
+version: 6
+updated: "2026-08-17"
+role_orders:
+  implement: [cursor, claude, agy, grok, copilot]
+  review: [codex, claude, grok, cursor]
+  plan: [claude, agy, cursor, grok]
+  tiny: [ollama, cursor]
+  debug: [claude, codex, cursor]
+  orchestrator: [cursor, claude]
 providers:
   cursor:
     binary: cursor-agent
     display: Cursor Agent
-    # No Headroom wrap — Cursor uses its own auth/endpoint; Anthropic Headroom
-    # proxy is the wrong lane (same rationale as agy / grok).
     passthrough: ["--model", "auto"]
     summary: "Auto · quota-smart default"
     why: "Auto is the Cursor value/quota-efficient lane for interactive agent runs"
+    roles: [implement, orchestrator, plan, review]
+    role_priority:
+      implement: 1
+      orchestrator: 1
+      plan: 3
+      review: 4
   claude:
     binary: claude
     display: Claude Code
@@ -21,6 +32,13 @@ providers:
     passthrough: ["--effort", "high"]
     summary: "Opus 5 · 1M · effort high"
     why: "Near-frontier agentic coding at half of Fable; high effort is the cost/quality sweet spot"
+    roles: [plan, review, implement, debug, orchestrator]
+    role_priority:
+      plan: 1
+      review: 2
+      implement: 2
+      debug: 1
+      orchestrator: 2
   codex:
     binary: codex
     display: Codex CLI
@@ -28,23 +46,26 @@ providers:
     passthrough: ["-m", "gpt-5.6-sol", "-c", "model_reasoning_effort=\"high\""]
     summary: "GPT-5.6 Sol · reasoning high"
     why: "Sol is the Codex value frontier for long agentic runs"
+    roles: [review, debug]
+    role_priority:
+      review: 1
+      debug: 2
   grok:
     binary: grok
     display: Grok CLI
-    # Native only — Headroom Anthropic-style proxy empties Grok's model catalog
-    # ("unknown model id"). Do not set headroom_wrap for grok.
     passthrough: ["-m", "grok-4.6", "--effort", "high"]
     summary: "grok-4.6 · effort high · native"
     why: "Grok CLI default is now 4.6; high effort without max burn; native launch avoids Headroom catalog wipe"
+    roles: [implement, plan, review]
+    role_priority:
+      implement: 4
+      plan: 4
+      review: 3
   copilot:
     binary: copilot
     display: GitHub Copilot CLI
     headroom_wrap: copilot
-    # Keep --subscription on the wrap side (before --). Never pass bare -p for port —
-    # launch injects long-form --port 8788 (shared DuReef proxy; Cursor OAuth keeps :8787).
     headroom_flags: ["--subscription"]
-    # Headroom sets a custom base URL → Copilot BYOK mode. GPT-5.6-* IDs are not in
-    # that built-in catalog; setting max token env vars silences the startup warning.
     env:
       COPILOT_PROVIDER_MODEL_ID: gpt-5.6-luna
       COPILOT_PROVIDER_MAX_PROMPT_TOKENS: "128000"
@@ -52,17 +73,26 @@ providers:
     passthrough: ["--model", "gpt-5.6-luna"]
     summary: "gpt-5.6-luna · subscription"
     why: "Luna is the Copilot credit-efficient coding lane; explicit token limits avoid Headroom BYOK catalog warnings"
+    roles: [implement]
+    role_priority:
+      implement: 5
   agy:
     binary: agy
     display: Antigravity (agy)
-    # No Headroom wrap — Google harness does not use Anthropic/OpenAI base URLs.
     passthrough: ["--model", "gemini-3.6-flash-high", "--effort", "high"]
     summary: "gemini-3.6-flash-high · effort high"
     why: "Best Gemini value tier on Antigravity; use gemini-3.1-pro-high for heavier reasoning"
+    roles: [implement, plan]
+    role_priority:
+      implement: 3
+      plan: 2
   ollama:
     binary: ollama
     display: Ollama (local)
-    # No Headroom — local inference, not a SaaS coding CLI.
     passthrough: ["run", "qwen3.5:4b"]
     summary: "qwen3.5:4b · local · tiny/helper (weak GPU OK)"
-    why: "Local tiny classify/format/helper jobs on weak GPUs or offline — NOT bang-for-buck agentic coding; use cursor/claude/codex/agy/grok/copilot for real coding work"
+    why: "Local tiny classify/format/helper jobs on weak GPUs or offline — NOT bang-for-buck agentic coding"
+    roles: [tiny, classify]
+    role_priority:
+      tiny: 1
+      classify: 1

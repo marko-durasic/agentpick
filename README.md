@@ -3,7 +3,7 @@
 Launch coding agents with **bang-for-buck** defaults — one CLI, versioned model registry, Headroom-aware when available.
 
 ```bash
-agentpick              # interactive picker (shows remaining quota when known)
+agentpick              # pick an orchestrator (recommended from quota + roles), then vibe-code
 agentpick list         # show optimal defaults + quota
 agentpick cursor       # Auto · quota-smart default
 agentpick claude       # Opus 5 · 1M · effort high
@@ -52,6 +52,44 @@ Probes run in parallel (~20s timeout) and cache for ~2 minutes under `~/.cache/a
 
 If the resolved port is **8787**, agentpick remaps to **8788** unless `AGENTPICK_ALLOW_HEADROOM_8787=1`. When the shared proxy’s `/readyz` is healthy, wrap also gets `--no-proxy` so it reuses that instance instead of starting another — **except** `copilot --subscription`, which needs a dedicated Headroom instance with session auth seeds (shared Anthropic proxy alone returns HTTP 401).
 
+
+## Orchestration (vibe-code session)
+
+Start here:
+
+```bash
+agentpick
+```
+
+You get a list of installed CLIs. One is **recommended as orchestrator** from remaining quota plus the role matrix (`cursor` first through the prepaid Auto window, then `claude`). Press Enter to take the recommendation, or type a number / name.
+
+That launches an **interactive session** with a briefing so the chosen CLI:
+
+1. Does routine coding with you (vibe-coding).
+2. Delegates specialist work itself via `agentpick dispatch` / `agentpick route` (plan → Claude, review → Codex, tiny → ollama, never self-review).
+
+The briefing is also written to `~/.cache/agentpick/orchestrator-brief.md`.
+
+### route + dispatch (manual / scripts)
+
+Rank providers by **role**, **quota**, and **role_priority** — then optionally run headless:
+
+```bash
+agentpick route --role review
+agentpick route --role review --exclude cursor --json
+agentpick dispatch --role plan -p "Design the API for user settings"
+agentpick dispatch --role review --exclude cursor --prompt-file review-brief.md --dry-run
+```
+
+Roles: `implement`, `review`, `plan`, `tiny`, `debug`, `orchestrator`  
+Aliases: `independent_review` → `review`, `idea_proposal` → `plan`, `tiny_task` → `tiny`
+
+Route history (JSONL): `~/.cache/agentpick/route-history.jsonl`  
+Optional rankings feed: `AGENTPICK_FEED_RANKINGS=1` appends to `~/.cache/dureef/model-rankings.json.agentpick-route.jsonl`
+
+DuReef sprint opt-in: `DUREEF_AGENTPICK_ROUTING=1` uses `agentpick route --json` inside `ResolveRole`.
+
+
 ## Install
 
 Requires Go 1.22+.
@@ -67,6 +105,7 @@ Installs `~/.local/bin/agentpick` plus short aliases: `hcursor`, `hclaude`, `hop
 ## Usage
 
 ```bash
+agentpick                    # orchestrator picker + launch
 agentpick --help
 agentpick list
 agentpick --dry-run claude          # print resolved argv (+ planned tokensave syncs)

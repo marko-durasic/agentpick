@@ -13,9 +13,10 @@ var embeddedYAML []byte
 
 // Registry is the versioned bang-for-buck provider catalog.
 type Registry struct {
-	Version   int                 `yaml:"version"`
-	Updated   string              `yaml:"updated"`
-	Providers map[string]Provider `yaml:"providers"`
+	Version     int                 `yaml:"version"`
+	Updated     string              `yaml:"updated"`
+	RoleOrders  map[string][]string `yaml:"role_orders"`
+	Providers   map[string]Provider   `yaml:"providers"`
 }
 
 // Provider describes how to launch one coding-agent CLI optimally.
@@ -28,6 +29,8 @@ type Provider struct {
 	Passthrough   []string          `yaml:"passthrough"`
 	Summary       string            `yaml:"summary"`
 	Why           string            `yaml:"why"`
+	Roles         []string          `yaml:"roles"`
+	RolePriority  map[string]int    `yaml:"role_priority"`
 }
 
 // Load parses the embedded defaults.yaml.
@@ -61,4 +64,18 @@ func (r *Registry) Names() []string {
 func (r *Registry) Get(name string) (Provider, bool) {
 	p, ok := r.Providers[name]
 	return p, ok
+}
+
+// RoleOrder returns the ordered provider list for a role, or nil when unset.
+func (r *Registry) RoleOrder(role string) []string {
+	if r == nil || r.RoleOrders == nil {
+		return nil
+	}
+	order, ok := r.RoleOrders[role]
+	if !ok || len(order) == 0 {
+		return nil
+	}
+	out := make([]string, len(order))
+	copy(out, order)
+	return out
 }

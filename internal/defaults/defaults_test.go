@@ -67,3 +67,21 @@ func TestLoad(t *testing.T) {
 		t.Fatalf("ollama passthrough: %v", ollama.Passthrough)
 	}
 }
+
+func TestRoleOrders(t *testing.T) {
+	reg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if reg.Version < 6 {
+		t.Fatalf("expected version >= 6, got %d", reg.Version)
+	}
+	order := reg.RoleOrder("review")
+	if len(order) < 2 || order[0] != "codex" {
+		t.Fatalf("review order: %v", order)
+	}
+	claude, ok := reg.Get("claude")
+	if !ok || len(claude.Roles) == 0 {
+		t.Fatal("claude roles missing")
+	}
+}

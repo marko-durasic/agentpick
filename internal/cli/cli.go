@@ -10,8 +10,11 @@ import (
 	"strings"
 
 	"github.com/marko-durasic/agentpick/internal/defaults"
+	"github.com/marko-durasic/agentpick/internal/history"
 	"github.com/marko-durasic/agentpick/internal/launch"
+	"github.com/marko-durasic/agentpick/internal/orchestrate"
 	"github.com/marko-durasic/agentpick/internal/quota"
+	"github.com/marko-durasic/agentpick/internal/route"
 	"github.com/marko-durasic/agentpick/internal/tokensync"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +31,10 @@ func NewRoot() *cobra.Command {
 		Long: `agentpick launches Cursor, Claude, Codex, Grok, Copilot, or Antigravity
 with opinionated optimal model/effort settings.
 
+With no arguments, agentpick is an orchestrator picker: it lists installed
+CLIs, recommends one from quota + role knowledge, then starts that session
+with instructions to delegate specialist work via agentpick dispatch.
+
 When Headroom is installed, eligible providers run through
   headroom wrap <tool> …
 so context stays compressed. Use --no-headroom to force the native CLI.
@@ -36,9 +43,6 @@ When tokensave is installed, agentpick runs
   tokensave sync
 on every indexed project before launch so the code graph stays ready.
 Use --no-tokensave to skip.
-
-Run with no arguments for an interactive provider picker (shows remaining
-quota when probes succeed).
 
 Global flags may appear before the provider name:
   agentpick --dry-run claude
@@ -50,12 +54,12 @@ Global flags may appear before the provider name:
 			if err != nil {
 				return err
 			}
-			name, err := pickProvider(cmd.InOrStdin(), cmd.OutOrStdout(), reg)
+			name, reason, err := pickOrchestrator(cmd.InOrStdin(), cmd.OutOrStdout(), reg)
 			if err != nil {
 				return err
 			}
 			opt := mergeOpts(noHeadroom, noTokensave, dryRun, nil)
-			return runProvider(reg, name, opt)
+			return runOrchestrator(reg, name, reason, opt)
 		},
 	}
 
@@ -64,6 +68,8 @@ Global flags may appear before the provider name:
 	root.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "print the resolved command without executing")
 
 	root.AddCommand(newListCmd())
+	root.AddCommand(newRouteCmd())
+	root.AddCommand(newDispatchCmd(&noHeadroom))
 	root.AddCommand(newProvidersCmd(&noHeadroom, &noTokensave, &dryRun)...)
 
 	return root
@@ -241,7 +247,21 @@ func runProvider(reg *defaults.Registry, name string, opt launch.Options) error 
 	return launch.Exec(plan, opt)
 }
 
-func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, error) {
+func runOrchestrator(reg *defaults.Registry, name, reason string, opt launch.Options) error {
+	briefPath, err := orchestrate.WriteBrief(name, reason)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "agentpick: orchestrator brief: %v\n", err)
+	} else {
+		fmt.Fprintf(os.Stderr, "agentpick: orchestrator=%s\n", name)
+		fmt.Fprintf(os.Stderr, "agentpick: brief=%s\n", briefPath)
+		fmt.Fprintf(os.Stderr, "agentpick: this session will delegate via agentpick dispatch as needed\n")
+		opt.ExtraArgs = append(orchestrate.ExtraArgs(name, briefPath), opt.ExtraArgs...)
+		opt.ExtraEnv = orchestrate.EnvVars(name, briefPath)
+	}
+	return runProvider(reg, name, opt)
+}
+
+func pickOrchestrator(in io.Reader, out io.Writer, reg *defaults.Registry) (string, string, error) {
 	type row struct {
 		name string
 		p    defaults.Provider
@@ -255,7 +275,25 @@ func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, 
 		rows = append(rows, row{name: name, p: p})
 	}
 	if len(rows) == 0 {
-		return "", fmt.Errorf("no supported agent CLIs found on PATH (install cursor-agent, claude, codex, grok, copilot, and/or agy)")
+		return "", "", fmt.Errorf("no supported agent CLIs found on PATH (install cursor-agent, claude, codex, grok, copilot, and/or agy)")
+	}
+
+	ctx := context.Background()
+	dec, err := route.Resolve(ctx, reg, route.Request{
+		Role:           "orchestrator",
+		RequireHealthy: true,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	_ = history.Append(dec)
+	history.MaybeFeedRankings(dec)
+
+	recommended := dec.Provider
+	reason := dec.Reason
+	if recommended == "" {
+		recommended = rows[0].name
+		reason = "first installed CLI"
 	}
 
 	names := make([]string, len(rows))
@@ -263,40 +301,61 @@ func pickProvider(in io.Reader, out io.Writer, reg *defaults.Registry) (string, 
 		names[i] = r.name
 	}
 	snaps := fetchQuotaFor(names)
+	defaultIdx := 1
+	for i, r := range rows {
+		if r.name == recommended {
+			defaultIdx = i + 1
+			break
+		}
+	}
 
-	fmt.Fprintln(out, "Select a coding agent")
+	fmt.Fprintln(out, "Select an orchestrator")
+	fmt.Fprintln(out, "Enter starts a vibe-coding session that can delegate to other CLIs.")
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "  Recommended: %s\n", recommended)
+	if reason != "" {
+		fmt.Fprintf(out, "  Why: %s\n", reason)
+	}
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "  "+quota.FormatPickerHeader())
 	fmt.Fprintln(out, "  "+strings.Repeat("─", 78))
 	for i, r := range rows {
 		snap := snaps[r.name]
-		fmt.Fprintln(out, "  "+quota.FormatPickerRow(i+1, r.name, r.p.Summary, snap))
+		line := quota.FormatPickerRow(i+1, r.name, r.p.Summary, snap)
+		if r.name == recommended {
+			line += "  ★ recommended orchestrator"
+		}
+		fmt.Fprintln(out, "  "+line)
 	}
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, quota.FormatLegend(snaps))
-	fmt.Fprint(out, "Choice [1]: ")
+	fmt.Fprintf(out, "Choice [%d]: ", defaultIdx)
 
 	scanner := bufio.NewScanner(in)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
-			return "", err
+			return "", "", err
 		}
-		return rows[0].name, nil
+		return recommended, reason, nil
 	}
 	line := strings.TrimSpace(scanner.Text())
 	if line == "" {
-		return rows[0].name, nil
+		return recommended, reason, nil
 	}
 	n, err := strconv.Atoi(line)
 	if err != nil || n < 1 || n > len(rows) {
 		for _, r := range rows {
 			if strings.EqualFold(line, r.name) {
-				return r.name, nil
+				return r.name, "manual pick", nil
 			}
 		}
-		return "", fmt.Errorf("invalid choice %q", line)
+		return "", "", fmt.Errorf("invalid choice %q", line)
 	}
-	return rows[n-1].name, nil
+	picked := rows[n-1].name
+	if picked == recommended {
+		return picked, reason, nil
+	}
+	return picked, "manual pick", nil
 }
 
 func fetchQuotaFor(names []string) map[string]quota.Snapshot {
