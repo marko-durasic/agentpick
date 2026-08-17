@@ -11,10 +11,11 @@ func TestRenderBriefContainsDelegateCommands(t *testing.T) {
 	got := RenderBrief("cursor", "quota+orchestrator")
 	for _, want := range []string{
 		"session orchestrator",
-		"agentpick dispatch",
-		"--exclude cursor",
+		"agentpick_dev",
+		"agentpick_review",
+		"/start",
+		"CAO",
 		"review",
-		"plan",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("brief missing %q", want)
