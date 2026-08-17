@@ -67,7 +67,7 @@ func RenderBrief(provider, reason string) string {
 	b.WriteString("This **is** Cursor CLI with the workspace loaded. Slash commands from `.cursor/commands`\n")
 	b.WriteString("(`/start`, `/wrap-up`, `/do-next`, …) work. Use them. Orchestration adds workers; it does not remove CLI features.\n\n")
 	b.WriteString("When specialist/parallel work is needed:\n")
-	b.WriteString("- **send_message** **agentpick_dev** / **agentpick_review** (assign only if missing). Dev may be a second instance of you.\n")
+	b.WriteString("- **send_message** **agentpick_dev** / **agentpick_review** and extra fleet panes (`agentpick_agy`, …). assign only if missing. Dev may be a second instance of you.\n")
 	b.WriteString("- If a worker is **grok** or **ollama**, they are not in Spawn Agent. Run\n")
 	b.WriteString("  `agentpick dispatch --role <role> --prefer <provider> -p \"<task>\"` yourself. Do not ask the human.\n")
 	b.WriteString("  Tiny/local classify-format → `--role tiny --prefer ollama`.\n\n")
@@ -95,7 +95,7 @@ func RenderBrief(provider, reason string) string {
 func ExtraArgs(provider, briefPath string) []string {
 	provider = strings.TrimSpace(strings.ToLower(provider))
 	prompt := fmt.Sprintf(
-		"You are the session orchestrator launched by agentpick via CAO. Read and follow %s. Full Cursor CLI. send_message agentpick_dev/review (dev may be a second instance of you); agentpick dispatch --prefer grok / --role tiny --prefer ollama when those workers were routed. Never ask the human to run agentpick route. Wait for my task.",
+		"You are the session orchestrator launched by agentpick via CAO. Read and follow %s. Full Cursor CLI. send_message the healthy fleet (agentpick_dev/review plus extras like agentpick_agy; dev may be a second instance of you); agentpick dispatch --prefer grok / --role tiny --prefer ollama when those workers were routed. Never ask the human to run agentpick route. Wait for my task.",
 		briefPath,
 	)
 	if provider == "claude" {

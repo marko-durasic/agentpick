@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/marko-durasic/agentpick/internal/defaults"
+	"github.com/marko-durasic/agentpick/internal/launch"
 	"github.com/marko-durasic/agentpick/internal/quota"
 	"github.com/marko-durasic/agentpick/internal/route"
 )
@@ -35,11 +36,17 @@ type Workers struct {
 	Implement Worker
 	Review    Worker
 	Tiny      Worker
+	// Extra is every other installed CLI: CAO panes for cursor/claude/agy/copilot/codex,
+	// plus Grok via dispatch (CAO 2.4.1 has no grok Spawn Agent provider).
+	Extra []Worker
 }
 
-// PickWorkers ranks leftover-quota peers once.
-// CAO-capable winners are assigned in tmux. Grok (and tiny ollama) stay in the
-// pool via `agentpick dispatch` so one entry point still reaches every CLI.
+// fleetCAONames are CLIs CAO 2.4.1 can launch in tmux (not grok/ollama).
+var fleetCAONames = []string{"cursor", "claude", "agy", "copilot", "codex"}
+
+// PickWorkers ranks leftover-quota peers once, then loads the rest of the fleet.
+// Role winners keep agentpick_dev / agentpick_review. Other healthy CAO CLIs
+// get agentpick_<name> panes. Grok (and tiny ollama) stay on dispatch.
 func PickWorkers(ctx context.Context, reg *defaults.Registry, supervisor string) (Workers, error) {
 	var out Workers
 	// Implement may be a second pane of the supervisor CLI when that is the quota winner.
@@ -59,7 +66,53 @@ func PickWorkers(ctx context.Context, reg *defaults.Registry, supervisor string)
 	out.Implement = namedFrom(impl, "implement", DevProfile)
 	out.Review = namedFrom(rev, "review", ReviewProfile)
 	out.Tiny = namedFrom(tiny, "tiny", "")
+	out.Extra = extraFleet(ctx, reg, supervisor, out)
 	return out, nil
+}
+
+func extraFleet(ctx context.Context, reg *defaults.Registry, supervisor string, w Workers) []Worker {
+	if reg == nil {
+		return nil
+	}
+	names := append([]string{}, fleetCAONames...)
+	names = append(names, "grok")
+	snaps := quota.FetchAll(ctx, quota.FetchOptions{Providers: names})
+	return extraFleetFrom(supervisor, w, snaps, func(name string) bool {
+		p, ok := reg.Get(name)
+		return ok && launch.Available(p)
+	})
+}
+
+func extraFleetFrom(supervisor string, w Workers, snaps map[string]quota.Snapshot, installed func(string) bool) []Worker {
+	sup := strings.ToLower(strings.TrimSpace(supervisor))
+	spawned := map[string]bool{}
+	if w.Implement.Via == ViaCAO && w.Implement.Provider != "" {
+		spawned[strings.ToLower(w.Implement.Provider)] = true
+	}
+	if w.Review.Via == ViaCAO && w.Review.Provider != "" {
+		spawned[strings.ToLower(w.Review.Provider)] = true
+	}
+	spawned[sup] = true // supervisor pane already exists
+	var extra []Worker
+	for _, name := range append(append([]string{}, fleetCAONames...), "grok") {
+		if spawned[name] || !installed(name) {
+			continue
+		}
+		snap := snaps[name]
+		if quotaExhausted(snap) {
+			continue
+		}
+		if name == "grok" {
+			wr := named(name, "peer", "")
+			wr.Why = quotaWhy(snap)
+			extra = append(extra, wr)
+			continue
+		}
+		wr := named(name, "peer", "agentpick_"+name)
+		wr.Why = quotaWhy(snap)
+		extra = append(extra, wr)
+	}
+	return extra
 }
 
 func namedFrom(c route.Candidate, role, profile string) Worker {
@@ -186,9 +239,14 @@ func (w Worker) DispatchCmd(workDir string) string {
 	return cmd
 }
 
+func allWorkers(w Workers) []Worker {
+	out := []Worker{w.Implement, w.Review, w.Tiny}
+	return append(out, w.Extra...)
+}
+
 func (w Workers) Summary() string {
 	var parts []string
-	for _, wr := range []Worker{w.Implement, w.Review, w.Tiny} {
+	for _, wr := range allWorkers(w) {
 		if wr.Provider == "" {
 			continue
 		}
@@ -210,4 +268,14 @@ func (w Workers) Summary() string {
 		return "no extra workers (supervisor does the work)"
 	}
 	return strings.Join(parts, ", ")
+}
+
+func extraNames(w Workers) string {
+	var names []string
+	for _, wr := range w.Extra {
+		if wr.Provider != "" {
+			names = append(names, wr.Provider)
+		}
+	}
+	return strings.Join(names, ",")
 }

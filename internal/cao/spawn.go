@@ -84,7 +84,7 @@ func spawnTerminalURL(base, session, profile, provider, workDir string) string {
 func caoAssignable(w Workers) []Worker {
 	var out []Worker
 	seen := map[string]bool{}
-	for _, wr := range []Worker{w.Implement, w.Review} {
+	for _, wr := range allWorkers(w) {
 		if wr.Via != ViaCAO || wr.Profile == "" || wr.CAOProvider == "" {
 			continue
 		}
@@ -107,7 +107,7 @@ type terminalRow struct {
 }
 
 // SpawnSessionWorkers waits for the CAO session then creates tmux workers so
-// the dashboard shows more than the supervisor. Grok/Ollama stay on dispatch.
+// the dashboard lists the healthy fleet. Grok/Ollama stay on dispatch.
 func SpawnSessionWorkers(ctx context.Context, plan Plan, opt Options) error {
 	workers := caoAssignable(opt.Workers)
 	if len(workers) == 0 {

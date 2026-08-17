@@ -42,7 +42,7 @@ The interactive picker and `list` show **remaining quota** with explicit windows
 | Claude | `claude /usage` (+ local session history fallback) |
 | Codex | ChatGPT `codex/usage` API from `~/.codex/auth.json` (fallback: tiny `codex exec` when API forbids) |
 | Copilot | Tiny `copilot -p` scrape (`monthly quota` / `AI Credits N`) |
-| Grok / agy | Tiny print/single prompt; report available vs limit errors (usually no %) |
+| Grok / agy | Grok: tiny print/single prompt (status vs limit). Agy: Models & Quota panel (`/usage`) — Gemini weekly % when JSON/cache is present; never `agy -p` (print mode does not show quota) |
 
 Probes run in parallel (~20s timeout) and cache for ~2 minutes under `~/.cache/agentpick/`.
 
@@ -68,11 +68,11 @@ You get a list of installed CLIs. One is **recommended as supervisor** from rema
 That:
 
 1. Writes `~/.cache/agentpick/orchestrator-brief.md`
-2. **Routes workers once** (quota leftover) and installs CAO profiles `agentpick_supervisor`, `agentpick_dev`, `agentpick_review`
+2. **Routes the healthy fleet once** (quota leftover) and installs CAO profiles `agentpick_supervisor`, `agentpick_dev`, `agentpick_review`, plus extras (`agentpick_agy`, …)
 3. Starts **AWS CAO** `cao-server` on **127.0.0.1:9889** if needed (pin `cli-agent-orchestrator==2.4.1`, never `@main`, never `--yolo`, never ports **8787** / **8788**)
-4. Opens **Cursor CLI** as supervisor **and pre-spawns** `agentpick_dev` / `agentpick_review` in the same CAO session so Home shows more than one running agent. The supervisor **send_message**s specialists (including a **second instance of itself** when that CLI won leftover quota). Workers **send_message** back and may talk to each other. Pick the worker by **role + remaining usage**. Do not do specialist work in the supervisor pane.
+4. Opens **Cursor CLI** as supervisor **and pre-spawns the healthy fleet** in the same CAO session: role winners `agentpick_dev` / `agentpick_review`, plus extra panes (`agentpick_agy`, `agentpick_copilot`, …) so Home lists every CAO-capable CLI that still has leftover quota. The supervisor **send_message**s specialists (including a **second instance of itself** when that CLI won leftover quota). Workers **send_message** back and may talk to each other. Pick the worker by **role + remaining usage**. Do not do specialist work in the supervisor pane.
 
-CAO 2.4.1 cannot spawn **Grok** or **Ollama**. agentpick still routes them: the supervisor **send_message**s cursor/claude/agy/copilot/codex workers (including a second Cursor pane when quota says so), and runs `agentpick dispatch --prefer grok` / `--role tiny --prefer ollama` for the rest. Spawn Agent will not list those two; that is expected.
+CAO 2.4.1 still cannot spawn **Grok** or **Ollama** (no Spawn Agent provider — that is unchanged; the earlier “Grok fix” was dispatch-only). agentpick still puts Grok in the session routing table: the supervisor runs `agentpick dispatch --prefer grok`. Exhausted CLIs (for example Codex at 0% until reset) are skipped. Spawn Agent will not list Grok/Ollama; that is expected until a later CAO pin that adds those providers.
 
 This is **full Cursor CLI**, including workspace slash commands from `.cursor/commands` (`/start`, `/wrap-up`, `/do-next`, …). Orchestration **adds** tmux workers; it does not strip CLI features. `agentpick` defaults `--working-directory` to a DuReef tree that has those commands (isolated clone when present), not the agentpick source repo. Override with `--dir` or `AGENTPICK_CAO_WORKDIR`.
 
@@ -152,7 +152,7 @@ Each provider entry has a one-line `why` — keep that honest when you change mo
 | `codex` | GPT-5.6 Sol · reasoning high | `wrap codex` | week % via Codex usage API |
 | `grok` | grok-4.6 · effort high | native only (xAI; Headroom Anthropic proxy breaks catalog) | CLI scrape (often status-only) |
 | `copilot` | gpt-5.6-luna · `--subscription` | `wrap copilot` | month / AI credits via CLI scrape |
-| `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | CLI scrape (often status-only) |
+| `agy` | gemini-3.6-flash-high · effort high | native only (Google harness) | Gemini weekly % from Models & Quota (`/usage`); `agy -p` is not a quota probe |
 | `ollama` | qwen3.5:4b · local tiny/helper | none (local) | no quota probe |
 
 ## Local / tiny (not optimal coding)

@@ -51,8 +51,12 @@ func TestSupervisorMarkdownKeepsSlashCommandsAndNoManualRoute(t *testing.T) {
 		Implement: Worker{Role: "implement", Provider: "agy", CAOProvider: "antigravity_cli", Profile: DevProfile, Via: ViaCAO},
 		Review:    Worker{Role: "review", Provider: "claude", CAOProvider: "claude_code", Profile: ReviewProfile, Via: ViaCAO},
 		Tiny:      Worker{Provider: "ollama", Role: "tiny", Via: ViaDispatch},
+		Extra: []Worker{
+			{Role: "peer", Provider: "copilot", CAOProvider: "copilot_cli", Profile: "agentpick_copilot", Via: ViaCAO},
+			{Role: "peer", Provider: "grok", Via: ViaDispatch},
+		},
 	}, "/tmp/ws")
-	for _, want := range []string{DevProfile, ReviewProfile, "agy", "claude", "full-featured", "/start", "/wrap-up", "agentpick dispatch", "--prefer ollama"} {
+	for _, want := range []string{DevProfile, ReviewProfile, "agy", "claude", "full-featured", "/start", "/wrap-up", "agentpick dispatch", "--prefer ollama", "agentpick_copilot", "--prefer grok", "every healthy installed CLI"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q", want)
 		}

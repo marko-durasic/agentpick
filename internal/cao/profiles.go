@@ -49,8 +49,10 @@ func supervisorMarkdown(supervisor string, w Workers, workDir string) string {
 	b.WriteString("6. If a worker hits usage limits, send_message the next healthy CAO worker or run the dispatch command. Never ask the human which CLI.\n")
 	b.WriteString("7. Only `assign` if a needed profile is **missing**. Never duplicate-assign. Never ask the human to run `agentpick route`.\n\n")
 	b.WriteString("### Session routing (quota at start)\n\n")
+	b.WriteString("This session loads **every healthy installed CLI**, not only one implement + one review winner.\n")
+	b.WriteString("Pick by role + leftover usage. send_message the matching profile.\n\n")
 	wrote := false
-	for _, wr := range []Worker{w.Implement, w.Review, w.Tiny} {
+	for _, wr := range allWorkers(w) {
 		if wr.Provider == "" {
 			continue
 		}
@@ -72,6 +74,9 @@ func supervisorMarkdown(supervisor string, w Workers, workDir string) string {
 		if wr.Role == "review" {
 			line += ". Never review your own work."
 		}
+		if wr.Role == "peer" && via == ViaCAO {
+			line += " — extra fleet pane; send_message when this CLI is the better leftover-quota fit"
+		}
 		b.WriteString(line + "\n")
 	}
 	if !wrote {
@@ -86,7 +91,7 @@ func supervisorMarkdown(supervisor string, w Workers, workDir string) string {
 	b.WriteString("\n### Dispatch (same machine, not in Spawn Agent)\n\n")
 	b.WriteString("CAO 2.4.1 cannot spawn Grok or Ollama. If a worker below is `via dispatch`, **run the command yourself** — do not ask the human, do not skip the peer.\n\n")
 	wroteDispatch := false
-	for _, wr := range []Worker{w.Implement, w.Review, w.Tiny} {
+	for _, wr := range allWorkers(w) {
 		if cmd := wr.DispatchCmd(workDir); cmd != "" {
 			fmt.Fprintf(&b, "- **%s** → `%s`\n", wr.Provider, cmd)
 			wroteDispatch = true
@@ -146,6 +151,12 @@ func InstallSessionProfiles(supervisor string, w Workers, workDir string) error 
 	}
 	if w.Review.Via == ViaCAO && w.Review.CAOProvider != "" {
 		items = append(items, item{ReviewProfile, workerMarkdown(ReviewProfile, "reviewer", w.Review.CAOProvider, w.Review.Provider), w.Review.CAOProvider})
+	}
+	for _, wr := range w.Extra {
+		if wr.Via != ViaCAO || wr.Profile == "" || wr.CAOProvider == "" {
+			continue
+		}
+		items = append(items, item{wr.Profile, workerMarkdown(wr.Profile, "developer", wr.CAOProvider, wr.Provider), wr.CAOProvider})
 	}
 	for _, it := range items {
 		path := filepath.Join(dir, it.name+".md")

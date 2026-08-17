@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/marko-durasic/agentpick/internal/quota"
 )
 
 func TestSpawnTerminalURLLoopback(t *testing.T) {
@@ -30,13 +32,44 @@ func TestCAOAssignableSkipsDispatch(t *testing.T) {
 	}
 }
 
-func TestCAOAssignableAllowsSupervisorClone(t *testing.T) {
+func TestCAOAssignableIncludesFleetExtras(t *testing.T) {
 	got := caoAssignable(Workers{
 		Implement: Worker{Via: ViaCAO, Provider: "cursor", Profile: DevProfile, CAOProvider: "cursor_cli"},
 		Review:    Worker{Via: ViaCAO, Provider: "claude", Profile: ReviewProfile, CAOProvider: "claude_code"},
+		Extra: []Worker{
+			{Via: ViaCAO, Provider: "agy", Profile: "agentpick_agy", CAOProvider: "antigravity_cli"},
+			{Via: ViaDispatch, Provider: "grok", Profile: "", CAOProvider: ""},
+			{Via: ViaCAO, Provider: "copilot", Profile: "agentpick_copilot", CAOProvider: "copilot_cli"},
+		},
 	})
-	if len(got) != 2 {
-		t.Fatalf("second cursor pane + review should both spawn, got %+v", got)
+	if len(got) != 4 {
+		t.Fatalf("dev+review+agy+copilot, skip grok dispatch, got %+v", got)
+	}
+}
+
+func TestExtraFleetSkipsExhaustedCodexAndSupervisor(t *testing.T) {
+	zero := 0.0
+	pct := 96.63
+	snaps := map[string]quota.Snapshot{
+		"agy":     {RemainingPct: &pct, Label: "week 97% left"},
+		"copilot": {Label: "available · no % exposed by CLI"},
+		"codex":   {RemainingPct: &zero},
+		"grok":    {Label: "available · no % exposed by CLI"},
+		"claude":  {Label: "week 100% left"},
+	}
+	w := Workers{
+		Implement: Worker{Via: ViaCAO, Provider: "cursor", Profile: DevProfile, CAOProvider: "cursor_cli"},
+		Review:    Worker{Via: ViaCAO, Provider: "claude", Profile: ReviewProfile, CAOProvider: "claude_code"},
+	}
+	installed := map[string]bool{"cursor": true, "claude": true, "agy": true, "copilot": true, "codex": true, "grok": true}
+	got := extraFleetFrom("cursor", w, snaps, func(name string) bool { return installed[name] })
+	var names []string
+	for _, wr := range got {
+		names = append(names, wr.Provider+":"+wr.Via+":"+wr.Profile)
+	}
+	want := []string{"agy:cao:agentpick_agy", "copilot:cao:agentpick_copilot", "grok:dispatch:"}
+	if strings.Join(names, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v want %v", names, want)
 	}
 }
 

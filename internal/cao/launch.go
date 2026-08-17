@@ -108,7 +108,10 @@ func Resolve(opt Options) (Plan, error) {
 	if opt.Workers.Review.Provider != "" {
 		launchArgv = append(launchArgv, "--env", "AGENTPICK_WORKER_REVIEW="+opt.Workers.Review.Provider)
 	}
-	launchArgv = append(launchArgv, "Workers are in this session (agentpick_dev may be a second instance of you). Divide and conquer: send_message the best worker by role and leftover usage. Workers send_message you back. Do not do specialist work yourself. Slash commands like /start work. Do not ask me to run agentpick route. Wait for my task.")
+	if fleet := extraNames(opt.Workers); fleet != "" {
+		launchArgv = append(launchArgv, "--env", "AGENTPICK_WORKER_FLEET="+fleet)
+	}
+	launchArgv = append(launchArgv, "Workers in this session are the full healthy fleet (agentpick_dev / agentpick_review plus extra panes like agentpick_agy). Divide and conquer: send_message the best worker by role and leftover usage, including Grok via the dispatch command when listed. Workers send_message you back. Do not do specialist work yourself. Slash commands like /start work. Do not ask me to run agentpick route. Wait for my task.")
 	for _, a := range launchArgv {
 		if a == "--yolo" || strings.HasPrefix(a, "--yolo=") {
 			return Plan{}, fmt.Errorf("internal error: --yolo must never be passed")
