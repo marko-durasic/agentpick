@@ -38,3 +38,36 @@ func TestCAOAssignableAllowsSupervisorClone(t *testing.T) {
 		t.Fatalf("second cursor pane + review should both spawn, got %+v", got)
 	}
 }
+
+func TestCanonicalCAOSessionPrefix(t *testing.T) {
+	if got := canonicalCAOSession("agentpick"); got != "cao-agentpick" {
+		t.Fatalf("got %q", got)
+	}
+	if got := canonicalCAOSession("cao-agentpick"); got != "cao-agentpick" {
+		t.Fatalf("double prefix %q", got)
+	}
+	if !sessionNameMatches("cao-agentpick", "agentpick") {
+		t.Fatal("listed cao-agentpick must match launched agentpick")
+	}
+	if !sessionNameMatches("agentpick", "cao-agentpick") {
+		t.Fatal("match must be symmetric")
+	}
+	if sessionNameMatches("cao-other", "agentpick") {
+		t.Fatal("must not match a different session")
+	}
+}
+
+func TestSessionNameUsesCAOPrefix(t *testing.T) {
+	t.Setenv("AGENTPICK_CAO_SESSION", "")
+	if got := sessionName(); got != "cao-agentpick" {
+		t.Fatalf("default %q", got)
+	}
+	t.Setenv("AGENTPICK_CAO_SESSION", "agentpick")
+	if got := sessionName(); got != "cao-agentpick" {
+		t.Fatalf("unprefixed env %q", got)
+	}
+	t.Setenv("AGENTPICK_CAO_SESSION", "cao-agentpick")
+	if got := sessionName(); got != "cao-agentpick" {
+		t.Fatalf("prefixed env %q", got)
+	}
+}

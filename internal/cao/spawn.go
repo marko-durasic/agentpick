@@ -13,14 +13,45 @@ import (
 	"time"
 )
 
-// DefaultSessionName is the CAO session agentpick reuses. Shutdown first if leftover.
+// DefaultSessionName is the CAO session agentpick reuses (before the cao- prefix).
+// Shutdown first if leftover.
 const DefaultSessionName = "agentpick"
 
+// caoSessionPrefix is CAO 2.4.1's tmux/API prefix (SESSION_PREFIX).
+// `cao launch --session-name agentpick` is stored as cao-agentpick.
+const caoSessionPrefix = "cao-"
+
 func sessionName() string {
-	if v := strings.TrimSpace(os.Getenv("AGENTPICK_CAO_SESSION")); v != "" {
-		return v
+	raw := strings.TrimSpace(os.Getenv("AGENTPICK_CAO_SESSION"))
+	if raw == "" {
+		raw = DefaultSessionName
 	}
-	return DefaultSessionName
+	return canonicalCAOSession(raw)
+}
+
+// canonicalCAOSession matches CAO's create_terminal prefixing so spawn
+// POSTs to the session that actually exists on GET /sessions.
+func canonicalCAOSession(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = DefaultSessionName
+	}
+	if strings.HasPrefix(name, caoSessionPrefix) {
+		return name
+	}
+	return caoSessionPrefix + name
+}
+
+func sessionNameMatches(got, want string) bool {
+	got = strings.TrimSpace(got)
+	want = strings.TrimSpace(want)
+	if got == "" || want == "" {
+		return false
+	}
+	if got == want {
+		return true
+	}
+	return canonicalCAOSession(got) == canonicalCAOSession(want)
 }
 
 func loopbackBase(host string, port int) string {
@@ -83,8 +114,12 @@ func SpawnSessionWorkers(ctx context.Context, plan Plan, opt Options) error {
 	}
 	wd := strings.TrimSpace(opt.WorkDir)
 	client := &http.Client{Timeout: 5 * time.Second}
-	if err := waitForSession(ctx, client, base, session); err != nil {
+	live, err := waitForSession(ctx, client, base, session)
+	if err != nil {
 		return err
+	}
+	if live != "" {
+		session = live
 	}
 	existing, _ := listProfiles(ctx, client, base, session)
 	for _, wr := range workers {
@@ -102,16 +137,16 @@ func SpawnSessionWorkers(ctx context.Context, plan Plan, opt Options) error {
 	return nil
 }
 
-func waitForSession(ctx context.Context, client *http.Client, base, session string) error {
+func waitForSession(ctx context.Context, client *http.Client, base, session string) (string, error) {
 	u := strings.TrimRight(base, "/") + "/sessions"
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return "", ctx.Err()
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
-			return err
+			return "", err
 		}
 		resp, err := client.Do(req)
 		if err == nil {
@@ -121,8 +156,11 @@ func waitForSession(ctx context.Context, client *http.Client, base, session stri
 				var rows []sessionRow
 				if json.Unmarshal(body, &rows) == nil {
 					for _, r := range rows {
-						if r.Name == session || r.ID == session {
-							return nil
+						if sessionNameMatches(r.Name, session) || sessionNameMatches(r.ID, session) {
+							if strings.TrimSpace(r.Name) != "" {
+								return r.Name, nil
+							}
+							return r.ID, nil
 						}
 					}
 				}
@@ -130,11 +168,11 @@ func waitForSession(ctx context.Context, client *http.Client, base, session stri
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return "", ctx.Err()
 		case <-time.After(400 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("CAO session %q did not appear on %s", session, u)
+	return "", fmt.Errorf("CAO session %q did not appear on %s", canonicalCAOSession(session), u)
 }
 
 func listProfiles(ctx context.Context, client *http.Client, base, session string) (map[string]bool, error) {
