@@ -67,6 +67,25 @@ func parseCopilotOut(out string) Snapshot {
 		return s
 	}
 
+	if strings.Contains(lower, "require an explicit model") {
+		// Startup refusal, not a usage signal: copilot 1.0.80 exits immediately in
+		// BYOK mode when no model is set. Without this the output falls through to
+		// the success branch and copilot is advertised as an available worker while
+		// every spawn dies.
+		s := Snapshot{Provider: "copilot", Source: "unknown",
+			UnavailableReason: "copilot in BYOK mode without a model (set COPILOT_MODEL)"}
+		s.Label = FormatLabel(s)
+		return s
+	}
+
+	if strings.Contains(lower, "authentication failed with provider") || strings.Contains(lower, "http 401") {
+		// Provider rejected us; same fall-through problem as above.
+		s := Snapshot{Provider: "copilot", Source: "unknown",
+			UnavailableReason: "copilot provider auth failed (HTTP 401)"}
+		s.Label = FormatLabel(s)
+		return s
+	}
+
 	if credits > 0 {
 		return Snapshot{
 			Provider: "copilot",
