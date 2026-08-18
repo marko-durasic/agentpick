@@ -88,3 +88,69 @@ func TestParseAgyTimeoutInconclusive(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+func TestParseLimitEmptyIsAvailable(t *testing.T) {
+	s := parseLimitOrAvailable("agy", "agy-cli", "  \n")
+	if s.RemainingPct != nil || !strings.Contains(s.Label, "available") {
+		t.Fatalf("empty print probe must not look like no quota: %+v", s)
+	}
+}
+
+func TestParseAgyUsagePanelGeminiWeekly(t *testing.T) {
+	panel := `
+Models & Quota
+Account: you@gmail.com
+
+GEMINI MODELS
+Gemini Flash, Gemini Pro
+Weekly Limit Remaining
+████████████████ 96.63%
+97% remaining · Refreshes in 49h 21m
+Five Hour Limit Remaining
+████████████████ 100.00%
+Quota available.
+
+CLAUDE AND GPT MODELS
+Claude Opus, Claude Sonnet, GPT-OSS
+Weekly Limit Remaining
+████████████████ 100.00%
+Quota available.
+Five Hour Limit Remaining
+████████████████ 100.00%
+Quota available.
+`
+	s, ok := parseAgyUsagePanel(panel)
+	if !ok || s.RemainingPct == nil {
+		t.Fatalf("ok=%v %+v", ok, s)
+	}
+	if *s.RemainingPct < 96.6 || *s.RemainingPct > 97.1 {
+		t.Fatalf("gemini weekly remaining %+v", s)
+	}
+	if s.Window != "week" {
+		t.Fatalf("window %q", s.Window)
+	}
+	if !strings.Contains(s.ResetHint, "49h") {
+		t.Fatalf("reset %q", s.ResetHint)
+	}
+}
+
+func TestParseAgyUsageJSONGeminiWeekly(t *testing.T) {
+	raw := `{
+	  "groups": [
+	    {
+	      "name": "GEMINI MODELS",
+	      "buckets": [
+	        {"kind":"weekly","label":"Weekly Limit","remainingFraction":0.9663,"resetsInSeconds":177660,"available":false},
+	        {"kind":"5h","label":"Five Hour Limit","remainingFraction":1,"available":true}
+	      ]
+	    }
+	  ]
+	}`
+	s, ok := parseAgyUsageJSON(raw)
+	if !ok || s.RemainingPct == nil || *s.RemainingPct < 96.6 || *s.RemainingPct > 96.7 {
+		t.Fatalf("ok=%v %+v", ok, s)
+	}
+	if !strings.Contains(s.Detail, "5h") {
+		t.Fatalf("detail %q", s.Detail)
+	}
+}

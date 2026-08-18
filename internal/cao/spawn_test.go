@@ -1,0 +1,114 @@
+package cao
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/marko-durasic/agentpick/internal/quota"
+)
+
+func TestSpawnTerminalURLLoopback(t *testing.T) {
+	u := spawnTerminalURL("http://127.0.0.1:9889", "agentpick", DevProfile, "claude_code", "/ws")
+	if strings.Contains(u, "0.0.0.0") || strings.Contains(u, "--yolo") {
+		t.Fatalf("unsafe url %s", u)
+	}
+	if !strings.Contains(u, "agent_profile="+DevProfile) || !strings.Contains(u, "provider=claude_code") {
+		t.Fatalf("missing query %s", u)
+	}
+	if !strings.Contains(u, "defer_init=true") {
+		t.Fatalf("want defer_init %s", u)
+	}
+}
+
+func TestCAOAssignableSkipsDispatch(t *testing.T) {
+	got := caoAssignable(Workers{
+		Implement: Worker{Via: ViaDispatch, Provider: "grok", Profile: DevProfile, CAOProvider: ""},
+		Review:    Worker{Via: ViaCAO, Provider: "claude", Profile: ReviewProfile, CAOProvider: "claude_code"},
+		Tiny:      Worker{Via: ViaDispatch, Provider: "ollama", Profile: ""},
+	})
+	if len(got) != 1 || got[0].Profile != ReviewProfile {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestCAOAssignableIncludesFleetExtras(t *testing.T) {
+	got := caoAssignable(Workers{
+		Implement: Worker{Via: ViaCAO, Provider: "cursor", Profile: DevProfile, CAOProvider: "cursor_cli"},
+		Review:    Worker{Via: ViaCAO, Provider: "claude", Profile: ReviewProfile, CAOProvider: "claude_code"},
+		Extra: []Worker{
+			{Via: ViaCAO, Provider: "agy", Profile: "agentpick_agy", CAOProvider: "antigravity_cli"},
+			{Via: ViaDispatch, Provider: "grok", Profile: "", CAOProvider: ""},
+			{Via: ViaCAO, Provider: "copilot", Profile: "agentpick_copilot", CAOProvider: "copilot_cli"},
+		},
+	})
+	if len(got) != 4 {
+		t.Fatalf("dev+review+agy+copilot, skip grok dispatch, got %+v", got)
+	}
+}
+
+func TestExtraFleetSkipsExhaustedCodexAndSupervisor(t *testing.T) {
+	zero := 0.0
+	pct := 96.63
+	snaps := map[string]quota.Snapshot{
+		"agy":     {RemainingPct: &pct, Label: "week 97% left"},
+		"copilot": {Label: "available · no % exposed by CLI"},
+		"codex":   {RemainingPct: &zero},
+		"grok":    {Label: "available · no % exposed by CLI"},
+		"claude":  {Label: "week 100% left"},
+	}
+	w := Workers{
+		Implement: Worker{Via: ViaCAO, Provider: "cursor", Profile: DevProfile, CAOProvider: "cursor_cli"},
+		Review:    Worker{Via: ViaCAO, Provider: "claude", Profile: ReviewProfile, CAOProvider: "claude_code"},
+	}
+	installed := map[string]bool{"cursor": true, "claude": true, "agy": true, "copilot": true, "codex": true, "grok": true}
+	got := extraFleetFrom("cursor", w, snaps, func(name string) bool { return installed[name] })
+	var names []string
+	for _, wr := range got {
+		names = append(names, wr.Provider+":"+wr.Via+":"+wr.Profile)
+	}
+	want := []string{"agy:cao:agentpick_agy", "copilot:cao:agentpick_copilot", "grok:dispatch:"}
+	if strings.Join(names, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v want %v", names, want)
+	}
+}
+
+func TestCanonicalCAOSessionPrefix(t *testing.T) {
+	if got := canonicalCAOSession("agentpick"); got != "cao-agentpick" {
+		t.Fatalf("got %q", got)
+	}
+	if got := canonicalCAOSession("cao-agentpick"); got != "cao-agentpick" {
+		t.Fatalf("double prefix %q", got)
+	}
+	if !sessionNameMatches("cao-agentpick", "agentpick") {
+		t.Fatal("listed cao-agentpick must match launched agentpick")
+	}
+	if !sessionNameMatches("agentpick", "cao-agentpick") {
+		t.Fatal("match must be symmetric")
+	}
+	if sessionNameMatches("cao-other", "agentpick") {
+		t.Fatal("must not match a different session")
+	}
+}
+
+func TestSessionNameUsesCAOPrefix(t *testing.T) {
+	t.Setenv("AGENTPICK_CAO_SESSION", "")
+	got := sessionName()
+	if !strings.HasPrefix(got, "cao-agentpick-") {
+		t.Fatalf("default unique session %q", got)
+	}
+	a := newSessionSlug()
+	time.Sleep(time.Millisecond)
+	b := newSessionSlug()
+	if a == b {
+		t.Fatalf("expected unique slugs, both %q", a)
+	}
+	t.Setenv("AGENTPICK_CAO_SESSION", "agentpick")
+	if got := sessionName(); got != "cao-agentpick" {
+		t.Fatalf("sticky unprefixed env %q", got)
+	}
+	t.Setenv("AGENTPICK_CAO_SESSION", "cao-agentpick")
+	if got := sessionName(); got != "cao-agentpick" {
+		t.Fatalf("sticky prefixed env %q", got)
+	}
+}

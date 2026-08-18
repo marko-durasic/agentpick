@@ -16,26 +16,11 @@ func probeGrok(ctx context.Context) Snapshot {
 	return parseLimitOrAvailable("grok", "grok-cli", out)
 }
 
-func probeAgy(ctx context.Context) Snapshot {
-	bin, err := lookCLI("agy")
-	if err != nil {
-		s := Snapshot{Provider: "agy", Source: "unknown", UnavailableReason: "agy not on PATH"}
-		s.Label = FormatLabel(s)
-		return s
-	}
-	out, _ := runCLI(ctx, bin, "-p", "PONG")
-	return parseLimitOrAvailable("agy", "agy-cli", out)
-}
-
 func parseLimitOrAvailable(provider, source, out string) Snapshot {
 	if strings.TrimSpace(out) == "" {
-		s := Snapshot{
-			Provider:          provider,
-			Source:            "unknown",
-			UnavailableReason: provider + " probe returned no output",
-		}
-		s.Label = FormatLabel(s)
-		return s
+		// Binary was on PATH; print/single probes often emit nothing.
+		// That is not "no quota" — agy's /usage panel is a TUI, not -p.
+		return availableCLI(provider, source)
 	}
 	lower := strings.ToLower(out)
 	if strings.Contains(lower, "usage limit") ||
@@ -63,9 +48,5 @@ func parseLimitOrAvailable(provider, source, out string) Snapshot {
 		s.Label = FormatLabel(s)
 		return s
 	}
-	return Snapshot{
-		Provider: provider,
-		Source:   source,
-		Label:    "available · no % exposed by CLI",
-	}
+	return availableCLI(provider, source)
 }
