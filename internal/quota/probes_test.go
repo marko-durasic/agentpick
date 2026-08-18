@@ -75,6 +75,36 @@ func TestParseCopilotMonthlyExhausted(t *testing.T) {
 	}
 }
 
+func TestParseCopilotBYOKNoModelUnavailable(t *testing.T) {
+	out := "BYOK providers require an explicit model. Run `copilot help providers` for configuration details."
+	s := parseCopilotOut(out)
+	if s.UnavailableReason == "" {
+		t.Fatalf("byok refusal must be unavailable: %+v", s)
+	}
+	if strings.Contains(s.Label, "available") {
+		t.Fatalf("label must not advertise availability: %q", s.Label)
+	}
+}
+
+func TestParseCopilotProviderAuthFailedUnavailable(t *testing.T) {
+	out := "Authentication failed with provider at http://127.0.0.1:8788 (HTTP 401)."
+	s := parseCopilotOut(out)
+	if s.UnavailableReason == "" {
+		t.Fatalf("auth failure must be unavailable: %+v", s)
+	}
+	if strings.Contains(s.Label, "available") {
+		t.Fatalf("label must not advertise availability: %q", s.Label)
+	}
+}
+
+func TestParseCopilotMonthlyStillWinsOverNewBranches(t *testing.T) {
+	out := "You have exceeded your monthly quota (Request ID: abc)\n\nAI Credits 0 (7s)\n"
+	s := parseCopilotOut(out)
+	if s.RemainingPct == nil || *s.RemainingPct != 0 || s.Window != "month" {
+		t.Fatalf("%+v", s)
+	}
+}
+
 func TestParseGrokAvailable(t *testing.T) {
 	s := parseLimitOrAvailable("grok", "grok-cli", "PONG\n")
 	if s.RemainingPct != nil || !strings.Contains(s.Label, "available") {
