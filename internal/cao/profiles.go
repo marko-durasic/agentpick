@@ -8,7 +8,24 @@ import (
 	"strings"
 )
 
-func mcpFrontmatter(name, desc, role, caoProvider string) string {
+// supervisorAllowedTools overrides CAO's ROLE_TOOL_DEFAULTS["supervisor"]
+// (@cao-mcp-server, fs_read, fs_list), which launches the supervisor pane
+// with --disallowedTools Bash. Without execute_bash the supervisor cannot
+// run the `agentpick dispatch` commands this prompt tells it to run, and
+// cannot verify a worker's claims. fs_write stays out, so the supervisor
+// still cannot implement — only coordinate and verify.
+var supervisorAllowedTools = []string{"@cao-mcp-server", "fs_read", "fs_list", "execute_bash"}
+
+func mcpFrontmatter(name, desc, role, caoProvider string, allowedTools []string) string {
+	tools := ""
+	if len(allowedTools) > 0 {
+		var t strings.Builder
+		t.WriteString("allowedTools:\n")
+		for _, tool := range allowedTools {
+			fmt.Fprintf(&t, "  - %q\n", tool)
+		}
+		tools = t.String()
+	}
 	return fmt.Sprintf(`---
 name: %s
 description: %s
@@ -19,8 +36,8 @@ mcpServers:
     type: stdio
     command: cao-mcp-server
     args: []
----
-`, name, desc, role, caoProvider)
+%s---
+`, name, desc, role, caoProvider, tools)
 }
 
 func supervisorMarkdown(supervisor string, w Workers, workDir string) string {
@@ -30,11 +47,15 @@ func supervisorMarkdown(supervisor string, w Workers, workDir string) string {
 	}
 	sup := strings.ToLower(strings.TrimSpace(supervisor))
 	var b strings.Builder
-	b.WriteString(mcpFrontmatter(SupervisorProfile, "agentpick vibe supervisor — workers already routed", "supervisor", id))
+	name := sup
+	if name == "" {
+		name = id
+	}
+	b.WriteString(mcpFrontmatter(SupervisorProfile, "agentpick vibe supervisor — workers already routed", "supervisor", id, supervisorAllowedTools))
 	b.WriteString("# agentpick supervisor\n\n")
 	b.WriteString("You are the vibe-coding supervisor launched by **agentpick** (AWS CAO).\n\n")
-	b.WriteString("## Cursor CLI is full-featured\n\n")
-	b.WriteString("This **is** Cursor CLI. Workspace slash commands from `.cursor/commands` work here\n")
+	b.WriteString("## Your CLI is full-featured\n\n")
+	fmt.Fprintf(&b, "This **is** the `%s` CLI. Workspace slash commands from `.cursor/commands` work here\n", name)
 	b.WriteString("(`/start`, `/wrap-up`, `/do-next`, `/create-pr`, …). Use them. Do not tell the human\n")
 	b.WriteString("those commands are IDE-only or missing.\n\n")
 	b.WriteString("Orchestration **adds** parallel workers on top of that CLI. It does not replace or reduce it.\n\n")
@@ -112,7 +133,7 @@ func workerMarkdown(profile, role, caoProvider, agentpickName string) string {
 		desc = "agentpick independent review worker"
 	}
 	var b strings.Builder
-	b.WriteString(mcpFrontmatter(profile, desc, role, caoProvider))
+	b.WriteString(mcpFrontmatter(profile, desc, role, caoProvider, nil))
 	fmt.Fprintf(&b, "# agentpick %s (%s)\n\n", title, agentpickName)
 	b.WriteString("You are a CAO specialist. Divide-and-conquer with the supervisor and other workers.\n\n")
 	b.WriteString("- Stay idle until you get a **send_message** (or assign) with a self-contained slice.\n")

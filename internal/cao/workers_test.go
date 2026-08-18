@@ -96,3 +96,25 @@ func TestDispatchCmdGrok(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestSupervisorProfileAllowsExecuteBashAndWorkerHasNoAllowedTools(t *testing.T) {
+	body := supervisorMarkdown("claude", Workers{
+		Implement: Worker{Role: "implement", Provider: "agy", CAOProvider: "antigravity_cli", Profile: DevProfile, Via: ViaCAO},
+	}, "/tmp/ws")
+	if !strings.Contains(body, "allowedTools:") {
+		t.Fatal("supervisor profile must emit allowedTools so CAO does not fall back to ROLE_TOOL_DEFAULTS")
+	}
+	if !strings.Contains(body, `"execute_bash"`) {
+		t.Fatal("supervisor needs execute_bash to run agentpick dispatch commands")
+	}
+	if strings.Contains(body, `"fs_write"`) {
+		t.Fatal("supervisor must not get fs_write; it coordinates, it does not implement")
+	}
+	if !strings.Contains(body, "This **is** the `claude` CLI") {
+		t.Fatal("supervisor prompt must name its own CLI, not hardcode Cursor")
+	}
+	worker := workerMarkdown(DevProfile, "developer", "cursor_cli", "cursor")
+	if strings.Contains(worker, "allowedTools:") {
+		t.Fatal("worker profiles must keep CAO role defaults, not carry allowedTools")
+	}
+}
