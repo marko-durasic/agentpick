@@ -78,6 +78,8 @@ This is **full Cursor CLI**, including workspace slash commands from `.cursor/co
 
 UI: [http://127.0.0.1:9889](http://127.0.0.1:9889). Each `agentpick` starts a **new** CAO session (unique name) so a second terminal does not collide. Reuse one session with `AGENTPICK_CAO_SESSION=agentpick`. Stop leftover sessions: `cao shutdown --all`.
 
+Scroll in a pane: **mouse wheel** or **PageUp / PageDown** (agentpick turns tmux `mouse` on; CAO 2.4.1 leaves it off, so wheel otherwise does nothing in Cursor/Claude TUIs). Raw process output: `Ctrl-b` then `[`, then wheel or arrows; `q` to leave copy-mode. In the web UI, click the terminal so it has focus (otherwise the page steals PageUp).
+
 `dureef-sprint` (scheduled shifts) does **not** start CAO. `agentpick cursor` / `agentpick claude` still launch a single CLI.
 
 `--no-cao` (or `AGENTPICK_NO_CAO=1`) falls back to one CLI plus a briefing.

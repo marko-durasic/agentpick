@@ -167,6 +167,11 @@ func Run(ctx context.Context, opt Options) error {
 	if opt.DryRun {
 		fmt.Printf("dry-run: %s\n", shellJoin(plan.ServerArgv))
 		fmt.Printf("dry-run: %s\n", shellJoin(plan.LaunchArgv))
+		if cmds, err := tmuxScrollArgv(plan.SessionName); err == nil {
+			for _, argv := range cmds {
+				fmt.Printf("dry-run: %s\n", shellJoin(argv))
+			}
+		}
 		if s := opt.Workers.Summary(); s != "" {
 			fmt.Printf("dry-run workers: %s\n", s)
 		}
@@ -188,6 +193,11 @@ func Run(ctx context.Context, opt Options) error {
 	fmt.Fprintf(os.Stderr, "agentpick: CAO session %s — http://%s:%d (new agentpick = new session; AGENTPICK_CAO_SESSION to reuse)\n", plan.SessionName, plan.Host, plan.Port)
 	spawnCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	go func() {
+		if err := EnableSessionScroll(spawnCtx, plan.SessionName); err != nil && spawnCtx.Err() == nil {
+			fmt.Fprintf(os.Stderr, "agentpick: tmux scroll: %v\n", err)
+		}
+	}()
 	go func() {
 		if err := SpawnSessionWorkers(spawnCtx, plan, opt); err != nil && spawnCtx.Err() == nil {
 			fmt.Fprintf(os.Stderr, "agentpick: spawn workers: %v\n", err)
