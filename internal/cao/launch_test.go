@@ -71,6 +71,13 @@ func TestResolveLaunchArgvNoYoloLoopback(t *testing.T) {
 	if !strings.Contains(server, "--host 127.0.0.1") || !strings.Contains(server, "--port 9889") {
 		t.Fatalf("server bind: %s", server)
 	}
+	scroll, err := tmuxScrollArgv(plan.SessionName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(scroll[0], " ") != "tmux set-option -t "+plan.SessionName+" mouse on" {
+		t.Fatalf("scroll mouse: %v", scroll)
+	}
 }
 
 func TestResolveHostPortRejectsReservedAndNonLoopback(t *testing.T) {
