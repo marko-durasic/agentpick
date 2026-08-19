@@ -19,16 +19,20 @@ func TestTmuxScrollArgv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 commands, got %d", len(got))
+	if len(got) != 3 {
+		t.Fatalf("want 3 commands, got %d", len(got))
 	}
 	mouse := strings.Join(got[0], " ")
 	hist := strings.Join(got[1], " ")
+	hook := strings.Join(got[2], " ")
 	if mouse != "tmux set-option -t cao-agentpick mouse on" {
 		t.Fatalf("mouse: %s", mouse)
 	}
-	if !strings.Contains(hist, "history-limit "+ScrollHistoryLimit) {
+	if !strings.Contains(hist, "-t cao-agentpick") || !strings.Contains(hist, "history-limit "+ScrollHistoryLimit) {
 		t.Fatalf("history: %s", hist)
+	}
+	if !strings.Contains(hook, "set-hook -t cao-agentpick client-attached") {
+		t.Fatalf("hook: %s", hook)
 	}
 	if _, err := tmuxScrollArgv("bad;name"); err == nil {
 		t.Fatal("expected unsafe name error")
