@@ -35,8 +35,9 @@ func NewRoot() *cobra.Command {
 with opinionated optimal model/effort settings.
 
 With no arguments, agentpick is the start command for a vibe-coding session:
-it lists installed CLIs, recommends a supervisor from quota + role knowledge,
-routes workers once, then starts AWS CAO (tmux workers on localhost :9889).
+it lists installed CLIs, recommends a supervisor from quota + role/model rank,
+warm-starts the healthy fleet, then re-routes each assignment by fresh quota and
+available concurrency in AWS CAO (tmux workers on localhost :9889).
 Cursor CLI slash commands from the workspace (.cursor/commands) stay available.
 Orchestration adds workers; it does not replace the CLI.
 

@@ -46,12 +46,16 @@ func supervisorMarkdown(supervisor string, w Workers, workDir string) string {
 		id = "cursor_cli"
 	}
 	sup := strings.ToLower(strings.TrimSpace(supervisor))
+	maxActive := w.MaxActive
+	if maxActive <= 0 {
+		maxActive = DefaultMaxActive
+	}
 	var b strings.Builder
 	name := sup
 	if name == "" {
 		name = id
 	}
-	b.WriteString(mcpFrontmatter(SupervisorProfile, "agentpick vibe supervisor — workers already routed", "supervisor", id, supervisorAllowedTools))
+	b.WriteString(mcpFrontmatter(SupervisorProfile, "agentpick vibe supervisor — dynamically routes a healthy CLI fleet", "supervisor", id, supervisorAllowedTools))
 	b.WriteString("# agentpick supervisor\n\n")
 	b.WriteString("You are the vibe-coding supervisor launched by **agentpick** (AWS CAO).\n\n")
 	b.WriteString("## Your CLI is full-featured\n\n")
@@ -61,17 +65,25 @@ func supervisorMarkdown(supervisor string, w Workers, workDir string) string {
 	b.WriteString("Orchestration **adds** parallel workers on top of that CLI. It does not replace or reduce it.\n\n")
 	b.WriteString("## Divide and conquer — talk; do not do specialist work yourself\n\n")
 	b.WriteString("You coordinate. Workers implement and review. Agents **must talk to each other** via CAO MCP:\n\n")
-	b.WriteString("1. Split the human's task into slices.\n")
-	b.WriteString("2. For each slice, pick the **best already-routed worker** from the table below (role + leftover usage at start).\n")
+	b.WriteString("Routing is live, not a one-time 1:1 assignment. Before each new slice, run ")
+	b.WriteString("`agentpick route --role <role> --require-healthy --json` yourself. The ranking combines ")
+	b.WriteString("role/model rank with fresh quota; choose the best provider that still has free capacity.\n")
+	fmt.Fprintf(&b, "Keep at most **%d active specialist tasks**. Ready panes are available, not busy; ", maxActive)
+	b.WriteString("never invent work just to fill capacity. A provider may have multiple instances when it ")
+	b.WriteString("still ranks best, but every writer needs a separate isolated worktree and a distinct task.\n")
+	b.WriteString("Never run concurrent writers in one checkout or let the implementer review its own change. ")
+	b.WriteString("Re-route after completion or a usage-limit failure. Never ask the human which CLI to use.\n\n")
+	b.WriteString("1. Split the human's task only into independent slices worth parallelizing.\n")
+	b.WriteString("2. Track active assignments and free panes; the table below is warm-start placement, not a permanent owner map.\n")
 	b.WriteString("3. **send_message** that worker a self-contained brief. You may **send_message another instance of yourself**\n")
 	b.WriteString("   (`agentpick_dev` when it is the same CLI) for parallel coding — that pane is a worker, not you.\n")
 	b.WriteString("4. Workers **send_message you back**. They may also send_message each other when a slice depends on another.\n")
 	b.WriteString("5. Do **not** implement specialist work in your own pane. Tiny one-file edits only, or work with no remaining worker.\n")
-	b.WriteString("6. If a worker hits usage limits, send_message the next healthy CAO worker or run the dispatch command. Never ask the human which CLI.\n")
-	b.WriteString("7. Only `assign` if a needed profile is **missing**. Never duplicate-assign. Never ask the human to run `agentpick route`.\n\n")
-	b.WriteString("### Session routing (quota at start)\n\n")
-	b.WriteString("This session loads **every healthy installed CLI**, not only one implement + one review winner.\n")
-	b.WriteString("Pick by role + leftover usage. send_message the matching profile.\n\n")
+	b.WriteString("6. If a worker hits usage limits, re-route and use the next healthy CAO worker or dispatch command.\n")
+	b.WriteString("7. Use `assign` for another instance only when capacity and checkout isolation make it safe. Never duplicate a task.\n\n")
+	b.WriteString("### Session routing (live)\n\n")
+	b.WriteString("This session warm-starts **every healthy installed CLI**, not only one implement + one review winner.\n")
+	b.WriteString("Re-route before each new assignment so quota changes, model rank, and current capacity affect the choice.\n\n")
 	wrote := false
 	for _, wr := range allWorkers(w) {
 		if wr.Provider == "" {

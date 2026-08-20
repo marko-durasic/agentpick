@@ -68,9 +68,11 @@ You get a list of installed CLIs. One is **recommended as supervisor** from rema
 That:
 
 1. Writes `~/.cache/agentpick/orchestrator-brief.md`
-2. **Routes the healthy fleet once** (quota leftover) and installs CAO profiles `agentpick_supervisor`, `agentpick_dev`, `agentpick_review`, plus extras (`agentpick_agy`, …)
+2. **Warm-starts the healthy fleet** from live quota + role/model rank and installs CAO profiles: `agentpick_supervisor`, `agentpick_dev`, `agentpick_review`, plus extras (`agentpick_agy`, …)
 3. Starts **AWS CAO** `cao-server` on **127.0.0.1:9889** if needed (pin `cli-agent-orchestrator==2.4.1`, never `@main`, never `--yolo`, never ports **8787** / **8788**)
-4. Opens **Cursor CLI** as supervisor **and pre-spawns the healthy fleet** in the same CAO session: role winners `agentpick_dev` / `agentpick_review`, plus extra panes (`agentpick_agy`, `agentpick_copilot`, …) so Home lists every CAO-capable CLI that still has leftover quota. The supervisor **send_message**s specialists (including a **second instance of itself** when that CLI won leftover quota). Workers **send_message** back and may talk to each other. Pick the worker by **role + remaining usage**. Do not do specialist work in the supervisor pane.
+4. Opens a **Cursor CLI** supervisor and **pre-spawns the healthy fleet** in the same CAO session. Before every new slice, the supervisor re-runs `agentpick route` itself, combining role/model rank with fresh quota and free capacity. It may use multiple isolated instances of one provider when that remains the best choice; a provider is not a 1:1 slot. At most four safe independent specialist tasks run at once by default. Ready panes may stay idle, and Agentpick never invents work merely to keep every CLI busy.
+
+Lower the safety ceiling with `AGENTPICK_MAX_ACTIVE_AGENTS=1..4`. Four is a hard cap; it is never a target.
 
 CAO 2.4.1 still cannot spawn **Grok** or **Ollama** (no Spawn Agent provider — that is unchanged; the earlier “Grok fix” was dispatch-only). agentpick still puts Grok in the session routing table: the supervisor runs `agentpick dispatch --prefer grok`. Exhausted CLIs (for example Codex at 0% until reset) are skipped. Spawn Agent will not list Grok/Ollama; that is expected until a later CAO pin that adds those providers.
 

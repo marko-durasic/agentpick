@@ -89,6 +89,10 @@ func Resolve(opt Options) (Plan, error) {
 		wd = choice.Path
 	}
 	session := sessionName()
+	maxActive := opt.Workers.MaxActive
+	if maxActive <= 0 {
+		maxActive = DefaultMaxActive
+	}
 	serverArgv := []string{serverBin, "--host", host, "--port", strconv.Itoa(port), "--terminal", "tmux"}
 	launchArgv := []string{
 		caoBin, "launch",
@@ -98,6 +102,7 @@ func Resolve(opt Options) (Plan, error) {
 		"--working-directory", wd,
 		"--env", "AGENTPICK_ORCHESTRATOR=1",
 		"--env", "AGENTPICK_ORCHESTRATOR_PROVIDER=" + opt.Provider,
+		"--env", "AGENTPICK_MAX_ACTIVE_AGENTS=" + strconv.Itoa(maxActive),
 	}
 	if p := strings.TrimSpace(opt.BriefPath); p != "" {
 		launchArgv = append(launchArgv, "--env", "AGENTPICK_ORCHESTRATOR_BRIEF="+p)
@@ -111,7 +116,7 @@ func Resolve(opt Options) (Plan, error) {
 	if fleet := extraNames(opt.Workers); fleet != "" {
 		launchArgv = append(launchArgv, "--env", "AGENTPICK_WORKER_FLEET="+fleet)
 	}
-	launchArgv = append(launchArgv, "Workers in this session are the full healthy fleet (agentpick_dev / agentpick_review plus extra panes like agentpick_agy). Divide and conquer: send_message the best worker by role and leftover usage, including Grok via the dispatch command when listed. Workers send_message you back. Do not do specialist work yourself. Slash commands like /start work. Do not ask me to run agentpick route. Wait for my task.")
+	launchArgv = append(launchArgv, "Workers in this session are the full healthy fleet. Before every new slice, run agentpick route yourself for fresh role/model rank and quota, then choose a free pane within the global capacity. Ready does not mean active. Providers are not 1:1 slots: another isolated instance is allowed when it still ranks best. Do not manufacture work, duplicate tasks, or use concurrent writers in one checkout. Workers send_message you back. Slash commands like /start work. Never ask me to choose a CLI. Wait for my task.")
 	for _, a := range launchArgv {
 		if a == "--yolo" || strings.HasPrefix(a, "--yolo=") {
 			return Plan{}, fmt.Errorf("internal error: --yolo must never be passed")

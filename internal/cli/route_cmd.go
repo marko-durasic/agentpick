@@ -178,7 +178,7 @@ func printRouteHuman(out interface{ Write([]byte) (int, error) }, dec route.Deci
 		fmt.Fprintf(out, "\nranked:\n")
 		for i, c := range dec.Ranked {
 			q := quota.FormatLabel(c.Quota)
-			fmt.Fprintf(out, "  %d. %-8s score=%.1f priority=%d quota=%s %s\n",
+			fmt.Fprintf(out, "  %d. %-8s score=%.1f model-rank=%d quota=%s %s\n",
 				i+1, c.Provider, c.Score, c.Priority, q, c.Reason)
 		}
 	}

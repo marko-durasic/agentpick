@@ -56,7 +56,7 @@ func TestSupervisorMarkdownKeepsSlashCommandsAndNoManualRoute(t *testing.T) {
 			{Role: "peer", Provider: "grok", Via: ViaDispatch},
 		},
 	}, "/tmp/ws")
-	for _, want := range []string{DevProfile, ReviewProfile, "agy", "claude", "full-featured", "/start", "/wrap-up", "agentpick dispatch", "--prefer ollama", "agentpick_copilot", "--prefer grok", "every healthy installed CLI"} {
+	for _, want := range []string{DevProfile, ReviewProfile, "agy", "claude", "full-featured", "/start", "/wrap-up", "agentpick dispatch", "--prefer ollama", "agentpick_copilot", "--prefer grok", "every healthy installed CLI", "role/model rank", "Ready panes are available, not busy", "not a one-time 1:1", "at most **4 active specialist tasks**"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %q", want)
 		}
@@ -116,5 +116,24 @@ func TestSupervisorProfileAllowsExecuteBashAndWorkerHasNoAllowedTools(t *testing
 	worker := workerMarkdown(DevProfile, "developer", "cursor_cli", "cursor")
 	if strings.Contains(worker, "allowedTools:") {
 		t.Fatal("worker profiles must keep CAO role defaults, not carry allowedTools")
+	}
+}
+
+func TestMaxActiveWorkersIsConfigurableAndBounded(t *testing.T) {
+	t.Setenv("AGENTPICK_MAX_ACTIVE_AGENTS", "")
+	if got := maxActiveWorkers(); got != DefaultMaxActive {
+		t.Fatalf("default=%d want %d", got, DefaultMaxActive)
+	}
+	t.Setenv("AGENTPICK_MAX_ACTIVE_AGENTS", "2")
+	if got := maxActiveWorkers(); got != 2 {
+		t.Fatalf("configured=%d want 2", got)
+	}
+	t.Setenv("AGENTPICK_MAX_ACTIVE_AGENTS", "99")
+	if got := maxActiveWorkers(); got != DefaultMaxActive {
+		t.Fatalf("upper bound=%d want %d", got, DefaultMaxActive)
+	}
+	t.Setenv("AGENTPICK_MAX_ACTIVE_AGENTS", "0")
+	if got := maxActiveWorkers(); got != 1 {
+		t.Fatalf("lower bound=%d want 1", got)
 	}
 }
