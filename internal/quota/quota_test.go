@@ -113,6 +113,60 @@ func TestSaveCacheKeepsGoodOnFailedProbe(t *testing.T) {
 	}
 }
 
+func TestUnavailableProbeIsCachedBriefly(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AGENTPICK_CACHE_DIR", dir)
+	now := time.Date(2026, 8, 15, 2, 0, 0, 0, time.UTC)
+	saveCache(map[string]Snapshot{
+		"grok": {
+			Provider:          "grok",
+			Source:            "unknown",
+			UnavailableReason: "grok probe inconclusive",
+			Label:             "grok probe inconclusive",
+		},
+	}, now)
+	cached, ok := loadCache(now.Add(time.Second))
+	if !ok || !allKnownCached([]string{"grok"}, cached) {
+		t.Fatalf("negative probe should suppress repeat within TTL: ok=%v %+v", ok, cached)
+	}
+}
+
+func TestFetchAllPreservesCachedHardFailure(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AGENTPICK_CACHE_DIR", dir)
+	now := time.Now()
+	saveCache(map[string]Snapshot{
+		"copilot": {
+			Provider:          "copilot",
+			Source:            "unknown",
+			UnavailableReason: "copilot in BYOK mode without model (set COPILOT_MODEL)",
+			Label:             "copilot in BYOK mode without model (set COPILOT_MODEL)",
+		},
+	}, now)
+	snaps := FetchAll(context.Background(), FetchOptions{Providers: []string{"copilot"}, Now: func() time.Time { return now.Add(time.Second) }})
+	if !BlocksRouting(snaps["copilot"]) {
+		t.Fatalf("cached hard failure must remain blocked: %+v", snaps["copilot"])
+	}
+}
+
+func TestBlocksRoutingAllowsUnknownQuotaButRejectsStartupFailure(t *testing.T) {
+	if BlocksRouting(Snapshot{UnavailableReason: "grok probe inconclusive"}) {
+		t.Fatal("inconclusive quota alone should not hide installed CLI")
+	}
+	if BlocksRouting(Snapshot{UnavailableReason: "no quota probe yet"}) {
+		t.Fatal("provider without quota API should remain routable")
+	}
+	if BlocksRouting(Snapshot{UnavailableReason: "usage API unavailable"}) {
+		t.Fatal("quota API failure must not hide an otherwise working CLI")
+	}
+	if !BlocksRouting(Snapshot{UnavailableReason: "authentication failed (HTTP 401)"}) {
+		t.Fatal("hard auth failure must block routing")
+	}
+	if !BlocksRouting(Snapshot{UnavailableReason: "copilot in BYOK mode without model (set COPILOT_MODEL)"}) {
+		t.Fatal("missing required model must block routing")
+	}
+}
+
 func TestDerivePercentUsed(t *testing.T) {
 	limit := 1000.0
 	remaining := 250.0

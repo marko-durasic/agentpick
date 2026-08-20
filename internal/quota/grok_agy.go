@@ -23,6 +23,17 @@ func parseLimitOrAvailable(provider, source, out string) Snapshot {
 		return availableCLI(provider, source)
 	}
 	lower := strings.ToLower(out)
+	if strings.Contains(lower, "http_status\": 401") ||
+		strings.Contains(lower, "authenticated inference requests still rejected (401)") ||
+		strings.Contains(lower, "authentication failed") {
+		s := Snapshot{
+			Provider:          provider,
+			Source:            "unknown",
+			UnavailableReason: provider + " authentication failed (HTTP 401)",
+		}
+		s.Label = FormatLabel(s)
+		return s
+	}
 	if strings.Contains(lower, "usage limit") ||
 		strings.Contains(lower, "rate limit") ||
 		strings.Contains(lower, "quota") && (strings.Contains(lower, "exceed") || strings.Contains(lower, "reached")) {

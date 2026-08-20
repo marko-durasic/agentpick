@@ -1,7 +1,7 @@
 # Bang-for-buck defaults for coding-agent CLIs.
 # Bump models here, rebuild, ship a PR — do not hardcode in launch logic.
-version: 6
-updated: "2026-08-17"
+version: 7
+updated: "2026-08-21"
 role_orders:
   implement: [cursor, claude, agy, grok, copilot]
   review: [codex, claude, grok, cursor]
@@ -53,9 +53,9 @@ providers:
   grok:
     binary: grok
     display: Grok CLI
-    passthrough: ["-m", "grok-4.6", "--effort", "high"]
-    summary: "grok-4.6 · effort high · native"
-    why: "Grok CLI default is now 4.6; high effort without max burn; native launch avoids Headroom catalog wipe"
+    passthrough: ["--effort", "high"]
+    summary: "account default (4.6) · effort high · native"
+    why: "CLI reports 4.6 as account default but rejects its explicit model ID; native default keeps Grok launchable"
     roles: [implement, plan, review]
     role_priority:
       implement: 4

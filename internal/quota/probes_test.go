@@ -112,6 +112,14 @@ func TestParseGrokAvailable(t *testing.T) {
 	}
 }
 
+func TestParseGrokAuthFailureBlocksRouting(t *testing.T) {
+	out := `Internal error: {"message":"authenticated inference requests still rejected (401)","http_status":401}`
+	s := parseLimitOrAvailable("grok", "grok-cli", out)
+	if !BlocksRouting(s) || !strings.Contains(s.UnavailableReason, "401") {
+		t.Fatalf("auth failure must block routing: %+v", s)
+	}
+}
+
 func TestParseAgyTimeoutInconclusive(t *testing.T) {
 	s := parseLimitOrAvailable("agy", "agy-cli", "Error: timeout waiting for response\n")
 	if s.RemainingPct != nil || !strings.Contains(s.Label, "inconclusive") {
