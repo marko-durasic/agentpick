@@ -58,6 +58,13 @@ func TestResolveLaunchArgvNoYoloLoopback(t *testing.T) {
 	if !strings.Contains(joined, "--working-directory /tmp/wd") {
 		t.Fatalf("missing wd: %s", joined)
 	}
+	if !strings.Contains(joined, "AGENTPICK_MAX_ACTIVE_AGENTS=4") {
+		t.Fatalf("missing concurrency capacity: %s", joined)
+	}
+	if !strings.Contains(joined, "role/model rank and quota") ||
+		!strings.Contains(joined, "Ready does not mean active") {
+		t.Fatalf("missing dynamic routing instructions: %s", joined)
+	}
 	if !strings.Contains(joined, "--agents agentpick_supervisor") {
 		t.Fatalf("missing profile: %s", joined)
 	}

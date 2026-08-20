@@ -3,6 +3,8 @@ package cao
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/marko-durasic/agentpick/internal/defaults"
@@ -17,8 +19,9 @@ const (
 	DevProfile        = "agentpick_dev"
 	ReviewProfile     = "agentpick_review"
 
-	ViaCAO      = "cao"
-	ViaDispatch = "dispatch"
+	ViaCAO           = "cao"
+	ViaDispatch      = "dispatch"
+	DefaultMaxActive = 4
 )
 
 // Worker is one pre-routed specialist for this session.
@@ -31,7 +34,8 @@ type Worker struct {
 	Why         string // leftover usage at session start
 }
 
-// Workers are chosen once at agentpick start — the human does not run route.
+// Workers are warm-started at agentpick launch. The supervisor re-routes each
+// new slice with fresh quota and current capacity; the human never runs route.
 type Workers struct {
 	Implement Worker
 	Review    Worker
@@ -39,16 +43,20 @@ type Workers struct {
 	// Extra is every other installed CLI: CAO panes for cursor/claude/agy/copilot/codex,
 	// plus Grok via dispatch (CAO 2.4.1 has no grok Spawn Agent provider).
 	Extra []Worker
+	// MaxActive is the global specialist concurrency ceiling. Ready panes may
+	// stay idle; the ceiling is not a target.
+	MaxActive int
 }
 
 // fleetCAONames are CLIs CAO 2.4.1 can launch in tmux (not grok/ollama).
 var fleetCAONames = []string{"cursor", "claude", "agy", "copilot", "codex"}
 
-// PickWorkers ranks leftover-quota peers once, then loads the rest of the fleet.
-// Role winners keep agentpick_dev / agentpick_review. Other healthy CAO CLIs
-// get agentpick_<name> panes. Grok (and tiny ollama) stay on dispatch.
+// PickWorkers chooses warm-start role placements, then loads the rest of the
+// fleet. The supervisor re-routes live before each assignment. Role winners
+// keep agentpick_dev / agentpick_review; other healthy CAO CLIs get
+// agentpick_<name> panes. Grok (and tiny ollama) stay on dispatch.
 func PickWorkers(ctx context.Context, reg *defaults.Registry, supervisor string) (Workers, error) {
-	var out Workers
+	out := Workers{MaxActive: maxActiveWorkers()}
 	// Implement may be a second pane of the supervisor CLI when that is the quota winner.
 	impl, err := pickRole(ctx, reg, "implement", supervisor, false, false)
 	if err != nil {
@@ -68,6 +76,24 @@ func PickWorkers(ctx context.Context, reg *defaults.Registry, supervisor string)
 	out.Tiny = namedFrom(tiny, "tiny", "")
 	out.Extra = extraFleet(ctx, reg, supervisor, out)
 	return out, nil
+}
+
+func maxActiveWorkers() int {
+	raw := strings.TrimSpace(os.Getenv("AGENTPICK_MAX_ACTIVE_AGENTS"))
+	if raw == "" {
+		return DefaultMaxActive
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return DefaultMaxActive
+	}
+	if n < 1 {
+		return 1
+	}
+	if n > DefaultMaxActive {
+		return DefaultMaxActive
+	}
+	return n
 }
 
 func extraFleet(ctx context.Context, reg *defaults.Registry, supervisor string, w Workers) []Worker {

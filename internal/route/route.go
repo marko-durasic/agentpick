@@ -34,24 +34,24 @@ type Request struct {
 
 // Candidate is one ranked provider option.
 type Candidate struct {
-	Provider string          `json:"provider"`
-	Score    float64         `json:"score"`
-	Priority int             `json:"priority"`
-	Quota    quota.Snapshot  `json:"quota"`
-	Healthy  bool            `json:"healthy"`
-	Reason   string          `json:"reason"`
+	Provider string         `json:"provider"`
+	Score    float64        `json:"score"`
+	Priority int            `json:"priority"`
+	Quota    quota.Snapshot `json:"quota"`
+	Healthy  bool           `json:"healthy"`
+	Reason   string         `json:"reason"`
 }
 
 // Decision is the routing outcome.
 type Decision struct {
-	Role     string      `json:"role"`
-	Provider string      `json:"provider"`
-	Reason   string      `json:"reason"`
-	Action   string      `json:"action"` // use | defer
-	Quota    quota.Snapshot `json:"quota"`
-	Ranked   []Candidate `json:"ranked"`
-	TaskClass string     `json:"task_class,omitempty"`
-	Lane      string     `json:"lane,omitempty"`
+	Role      string         `json:"role"`
+	Provider  string         `json:"provider"`
+	Reason    string         `json:"reason"`
+	Action    string         `json:"action"` // use | defer
+	Quota     quota.Snapshot `json:"quota"`
+	Ranked    []Candidate    `json:"ranked"`
+	TaskClass string         `json:"task_class,omitempty"`
+	Lane      string         `json:"lane,omitempty"`
 }
 
 // Resolve ranks providers for a role and returns the best eligible choice.
@@ -199,7 +199,7 @@ func scoreCandidate(priority int, snap quota.Snapshot) float64 {
 }
 
 func candidateReason(role string, pri int, snap quota.Snapshot, healthy bool) string {
-	parts := []string{role + "_role", fmt.Sprintf("priority=%d", pri)}
+	parts := []string{role + "_role", fmt.Sprintf("model_rank=%d", pri)}
 	if !healthy {
 		parts = append(parts, "missing")
 	}
