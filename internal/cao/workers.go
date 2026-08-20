@@ -49,33 +49,51 @@ type Workers struct {
 }
 
 // fleetCAONames are CLIs CAO 2.4.1 can launch in tmux (not grok/ollama).
-var fleetCAONames = []string{"cursor", "claude", "agy", "copilot", "codex"}
+var fleetCAONames = []string{"cursor", "claude", "agy", "codex"}
 
 // PickWorkers chooses warm-start role placements, then loads the rest of the
 // fleet. The supervisor re-routes live before each assignment. Role winners
 // keep agentpick_dev / agentpick_review; other healthy CAO CLIs get
 // agentpick_<name> panes. Grok (and tiny ollama) stay on dispatch.
-func PickWorkers(ctx context.Context, reg *defaults.Registry, supervisor string) (Workers, error) {
+func PickWorkers(ctx context.Context, reg *defaults.Registry, supervisor string, prefetched ...map[string]quota.Snapshot) (Workers, error) {
 	out := Workers{MaxActive: maxActiveWorkers()}
+	if reg == nil {
+		return out, nil
+	}
+	snaps := fleetQuota(ctx, reg, prefetched...)
 	// Implement may be a second pane of the supervisor CLI when that is the quota winner.
-	impl, err := pickRole(ctx, reg, "implement", supervisor, false, false)
+	impl, err := pickRole(ctx, reg, "implement", supervisor, false, false, snaps)
 	if err != nil {
 		return out, err
 	}
 	// Review never uses the supervisor (independent review).
-	rev, err := pickRole(ctx, reg, "review", supervisor, false, true)
+	rev, err := pickRole(ctx, reg, "review", supervisor, false, true, snaps)
 	if err != nil {
 		return out, err
 	}
-	tiny, err := pickRole(ctx, reg, "tiny", supervisor, true, true)
+	tiny, err := pickRole(ctx, reg, "tiny", supervisor, true, true, snaps)
 	if err != nil {
 		return out, err
 	}
 	out.Implement = namedFrom(impl, "implement", DevProfile)
 	out.Review = namedFrom(rev, "review", ReviewProfile)
 	out.Tiny = namedFrom(tiny, "tiny", "")
-	out.Extra = extraFleet(ctx, reg, supervisor, out)
+	out.Extra = extraFleet(reg, supervisor, out, snaps)
 	return out, nil
+}
+
+func fleetQuota(ctx context.Context, reg *defaults.Registry, prefetched ...map[string]quota.Snapshot) map[string]quota.Snapshot {
+	if len(prefetched) > 0 && prefetched[0] != nil {
+		return prefetched[0]
+	}
+	var names []string
+	for _, name := range reg.Names() {
+		p, ok := reg.Get(name)
+		if ok && launch.Available(p) {
+			names = append(names, name)
+		}
+	}
+	return quota.FetchAll(ctx, quota.FetchOptions{Providers: names})
 }
 
 func maxActiveWorkers() int {
@@ -96,13 +114,10 @@ func maxActiveWorkers() int {
 	return n
 }
 
-func extraFleet(ctx context.Context, reg *defaults.Registry, supervisor string, w Workers) []Worker {
+func extraFleet(reg *defaults.Registry, supervisor string, w Workers, snaps map[string]quota.Snapshot) []Worker {
 	if reg == nil {
 		return nil
 	}
-	names := append([]string{}, fleetCAONames...)
-	names = append(names, "grok")
-	snaps := quota.FetchAll(ctx, quota.FetchOptions{Providers: names})
 	return extraFleetFrom(supervisor, w, snaps, func(name string) bool {
 		p, ok := reg.Get(name)
 		return ok && launch.Available(p)
@@ -120,15 +135,15 @@ func extraFleetFrom(supervisor string, w Workers, snaps map[string]quota.Snapsho
 	}
 	spawned[sup] = true // supervisor pane already exists
 	var extra []Worker
-	for _, name := range append(append([]string{}, fleetCAONames...), "grok") {
+	for _, name := range append(append([]string{}, fleetCAONames...), "copilot", "grok") {
 		if spawned[name] || !installed(name) {
 			continue
 		}
 		snap := snaps[name]
-		if quotaExhausted(snap) {
+		if quotaExhausted(snap) || quota.BlocksRouting(snap) {
 			continue
 		}
-		if name == "grok" {
+		if name == "copilot" || name == "grok" {
 			wr := named(name, "peer", "")
 			wr.Why = quotaWhy(snap)
 			extra = append(extra, wr)
@@ -152,6 +167,12 @@ func named(provider, role, profile string) Worker {
 		return Worker{Role: role}
 	}
 	w := Worker{Role: role, Provider: provider, Profile: profile, Via: ViaDispatch}
+	// Copilot's CAO provider does not carry agentpick's model/subscription
+	// settings. Dispatch keeps its dedicated Headroom auth and model flags.
+	if strings.EqualFold(provider, "copilot") {
+		w.Profile = ""
+		return w
+	}
 	id, err := ProviderID(provider)
 	if err == nil {
 		w.CAOProvider = id
@@ -168,7 +189,7 @@ func quotaWhy(s quota.Snapshot) string {
 	return strings.TrimSpace(quota.FormatLabel(s))
 }
 
-func pickRole(ctx context.Context, reg *defaults.Registry, role, supervisor string, allowOllama, excludeSupervisor bool) (route.Candidate, error) {
+func pickRole(ctx context.Context, reg *defaults.Registry, role, supervisor string, allowOllama, excludeSupervisor bool, snaps map[string]quota.Snapshot) (route.Candidate, error) {
 	var exclude []string
 	if excludeSupervisor {
 		exclude = []string{supervisor}
@@ -177,6 +198,7 @@ func pickRole(ctx context.Context, reg *defaults.Registry, role, supervisor stri
 		Role:           role,
 		Exclude:        exclude,
 		RequireHealthy: true,
+		Quota:          snaps,
 	})
 	if err != nil {
 		return route.Candidate{}, err

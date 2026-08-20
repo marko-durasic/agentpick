@@ -30,6 +30,9 @@ type Request struct {
 	TaskClass      string // optional #750 hint (debug, plan, …)
 	Lane           string // optional business lane (revenue, product, …)
 	SkipQuota      bool
+	// Quota reuses one fleet snapshot across several role decisions. A nil map
+	// probes live; a non-nil map is authoritative for this routing pass.
+	Quota map[string]quota.Snapshot
 }
 
 // Candidate is one ranked provider option.
@@ -73,8 +76,11 @@ func Resolve(ctx context.Context, reg *defaults.Registry, req Request) (Decision
 	}
 
 	exclude := normalizeExcludeSet(req.Exclude)
-	snaps := map[string]quota.Snapshot{}
-	if !req.SkipQuota {
+	snaps := req.Quota
+	if snaps == nil {
+		snaps = map[string]quota.Snapshot{}
+	}
+	if req.Quota == nil && !req.SkipQuota {
 		snaps = quota.FetchAll(ctx, quota.FetchOptions{Providers: order})
 	}
 
@@ -88,7 +94,8 @@ func Resolve(ctx context.Context, reg *defaults.Registry, req Request) (Decision
 		if !ok {
 			continue
 		}
-		healthy := launch.Available(p)
+		snap := snaps[name]
+		healthy := launch.Available(p) && !quota.BlocksRouting(snap)
 		if req.RequireHealthy && !healthy {
 			continue
 		}
@@ -96,7 +103,6 @@ func Resolve(ctx context.Context, reg *defaults.Registry, req Request) (Decision
 			continue
 		}
 		pri := rolePriority(p, role)
-		snap := snaps[name]
 		score := scoreCandidate(pri, snap)
 		reason := candidateReason(role, pri, snap, healthy)
 		ranked = append(ranked, Candidate{

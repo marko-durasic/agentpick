@@ -4,6 +4,7 @@ package quota
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 )
@@ -119,11 +120,43 @@ func allKnownCached(names []string, cached map[string]Snapshot) bool {
 }
 
 func quotaKnown(s Snapshot) bool {
+	if quotaPositive(s) {
+		return true
+	}
+	// Cache negative/inconclusive probes briefly too. Otherwise every role
+	// decision re-runs the same slow CLI after one cold fleet probe.
+	return s.Source == "unknown" && (s.UnavailableReason != "" || s.Label != "")
+}
+
+func quotaPositive(s Snapshot) bool {
 	if s.RemainingPct != nil {
 		return true
 	}
 	// Status-only probes (e.g. "available · no % exposed").
 	return s.Source != "" && s.Source != "unknown" && s.Label != ""
+}
+
+// BlocksRouting reports a hard startup/auth failure. Missing percentage or an
+// inconclusive quota scrape alone must not hide an otherwise installed CLI.
+func BlocksRouting(s Snapshot) bool {
+	reason := strings.ToLower(strings.TrimSpace(s.UnavailableReason))
+	if reason == "" {
+		return false
+	}
+	hardFailures := []string{
+		"authentication failed",
+		"auth failed",
+		"http 401",
+		"without a model",
+		"without model",
+		"not on path",
+	}
+	for _, marker := range hardFailures {
+		if strings.Contains(reason, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 type probeFn func(ctx context.Context) Snapshot

@@ -8,8 +8,8 @@ import (
 )
 
 type cacheFile struct {
-	SavedAt time.Time            `json:"saved_at"`
-	Items   map[string]Snapshot  `json:"items"`
+	SavedAt time.Time           `json:"saved_at"`
+	Items   map[string]Snapshot `json:"items"`
 }
 
 func cachePath() string {
@@ -55,12 +55,12 @@ func saveCache(items map[string]Snapshot, now time.Time) {
 		}
 	}
 	for k, v := range items {
-		if quotaKnown(v) {
+		if quotaPositive(v) {
 			merged[k] = v
 			continue
 		}
 		// Do not clobber a good cached remaining % with a failed probe.
-		if prev, ok := merged[k]; ok && quotaKnown(prev) {
+		if prev, ok := merged[k]; ok && quotaPositive(prev) {
 			continue
 		}
 		merged[k] = v

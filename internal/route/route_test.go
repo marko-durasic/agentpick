@@ -72,4 +72,65 @@ func TestScoreCandidateQuotaTieBreak(t *testing.T) {
 	}
 }
 
+func TestResolveUsesPrefetchedFleetQuota(t *testing.T) {
+	reg, err := defaults.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	dec, err := Resolve(context.Background(), reg, Request{
+		Role: "implement",
+		Quota: map[string]quota.Snapshot{
+			"cursor": {Provider: "cursor", RemainingPct: ptrFloat(0)},
+			"claude": {Provider: "claude", RemainingPct: ptrFloat(100)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if dec.Provider != "claude" {
+		t.Fatalf("prefetched quota should balance toward claude, got %s (%s)", dec.Provider, dec.Reason)
+	}
+}
+
+func TestResolveMarksHardStartupFailureUnhealthy(t *testing.T) {
+	reg := &defaults.Registry{
+		RoleOrders: map[string][]string{"implement": {"broken"}},
+		Providers: map[string]defaults.Provider{
+			"broken": {Binary: "sh", Roles: []string{"implement"}},
+		},
+	}
+	dec, err := Resolve(context.Background(), reg, Request{
+		Role: "implement",
+		Quota: map[string]quota.Snapshot{
+			"broken": {Provider: "broken", UnavailableReason: "BYOK mode without model"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(dec.Ranked) != 1 || dec.Ranked[0].Healthy {
+		t.Fatalf("hard startup failure should be unhealthy: %+v", dec.Ranked)
+	}
+}
+
+func TestResolveMarksCopilotMissingModelUnhealthy(t *testing.T) {
+	reg, err := defaults.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	dec, err := Resolve(context.Background(), reg, Request{
+		Role:   "implement",
+		Prefer: []string{"copilot"},
+		Quota: map[string]quota.Snapshot{
+			"copilot": {Provider: "copilot", Source: "unknown", UnavailableReason: "copilot in BYOK mode without model (set COPILOT_MODEL)"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(dec.Ranked) != 1 || dec.Ranked[0].Healthy {
+		t.Fatalf("copilot startup refusal should be unhealthy: %+v", dec.Ranked)
+	}
+}
+
 func ptrFloat(f float64) *float64 { return &f }

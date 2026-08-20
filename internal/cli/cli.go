@@ -322,10 +322,17 @@ func pickOrchestrator(in io.Reader, out io.Writer, reg *defaults.Registry) (stri
 		return "", "", fmt.Errorf("no supported agent CLIs found on PATH (install cursor-agent, claude, codex, grok, copilot, and/or agy)")
 	}
 
+	names := make([]string, len(rows))
+	for i, r := range rows {
+		names[i] = r.name
+	}
+	snaps := fetchQuotaFor(names)
+
 	ctx := context.Background()
 	dec, err := route.Resolve(ctx, reg, route.Request{
 		Role:           "orchestrator",
 		RequireHealthy: true,
+		Quota:          snaps,
 	})
 	if err != nil {
 		return "", "", err
@@ -340,11 +347,6 @@ func pickOrchestrator(in io.Reader, out io.Writer, reg *defaults.Registry) (stri
 		reason = "first installed CLI"
 	}
 
-	names := make([]string, len(rows))
-	for i, r := range rows {
-		names[i] = r.name
-	}
-	snaps := fetchQuotaFor(names)
 	defaultIdx := 1
 	for i, r := range rows {
 		if r.name == recommended {

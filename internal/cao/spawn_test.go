@@ -67,9 +67,21 @@ func TestExtraFleetSkipsExhaustedCodexAndSupervisor(t *testing.T) {
 	for _, wr := range got {
 		names = append(names, wr.Provider+":"+wr.Via+":"+wr.Profile)
 	}
-	want := []string{"agy:cao:agentpick_agy", "copilot:cao:agentpick_copilot", "grok:dispatch:"}
+	want := []string{"agy:cao:agentpick_agy", "copilot:dispatch:", "grok:dispatch:"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("got %v want %v", names, want)
+	}
+}
+
+func TestExtraFleetSkipsHardUnavailableProvider(t *testing.T) {
+	w := Workers{Implement: Worker{Via: ViaCAO, Provider: "cursor"}}
+	snaps := map[string]quota.Snapshot{
+		"grok":    {Provider: "grok", UnavailableReason: "authentication failed (HTTP 401)"},
+		"copilot": {Provider: "copilot", UnavailableReason: "BYOK mode without model"},
+	}
+	got := extraFleetFrom("cursor", w, snaps, func(name string) bool { return name == "grok" || name == "copilot" })
+	if len(got) != 0 {
+		t.Fatalf("hard-unavailable provider should be skipped: %+v", got)
 	}
 }
 
